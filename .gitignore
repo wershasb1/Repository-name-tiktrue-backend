@@ -1,0 +1,46 @@
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Environment variables
+.env
+.venv/
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media files
+media/
+
+# Static files (will be collected)
+staticfiles/
+
+# Model files (large files - will be hosted separately)
+models/
+*.onnx
+*.bin
+*.safetensors
+assets/models/
+model_files/
+
+# Backup files
+*.bak
+
+# Python
+*.egg-info/
+dist/
+build/
