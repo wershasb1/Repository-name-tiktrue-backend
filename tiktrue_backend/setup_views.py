@@ -10,29 +10,43 @@ import sys
 def setup_database(request):
     """Setup database tables and initial data"""
     try:
-        # Capture command output
-        output = io.StringIO()
+        results = {}
         
-        # Run migrations
+        # 1. Create migrations for custom apps
+        apps_to_migrate = ['accounts', 'licenses', 'models_api']
+        
+        for app in apps_to_migrate:
+            output = io.StringIO()
+            try:
+                call_command('makemigrations', app, stdout=output, stderr=output)
+                results[f'makemigrations_{app}'] = output.getvalue()
+            except Exception as e:
+                results[f'makemigrations_{app}_error'] = str(e)
+        
+        # 2. Run migrations
+        output = io.StringIO()
         call_command('migrate', stdout=output, stderr=output)
-        migrate_output = output.getvalue()
+        results['migrate'] = output.getvalue()
         
-        # Setup initial data
+        # 3. Setup initial data
         output = io.StringIO()
-        call_command('setup_initial_data', stdout=output, stderr=output)
-        setup_output = output.getvalue()
+        try:
+            call_command('setup_initial_data', stdout=output, stderr=output)
+            results['setup_data'] = output.getvalue()
+        except Exception as e:
+            results['setup_data_error'] = str(e)
         
         return JsonResponse({
             'success': True,
-            'message': 'Database setup completed successfully',
-            'migrate_output': migrate_output,
-            'setup_output': setup_output
+            'message': 'Database setup completed',
+            'results': results
         })
         
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'results': results if 'results' in locals() else {}
         }, status=500)
 
 @require_http_methods(["GET"])
