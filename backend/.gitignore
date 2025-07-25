@@ -9,7 +9,7 @@ db.sqlite3-journal
 
 # Environment variables
 .env
-.venv
+.venv/
 env/
 venv/
 
@@ -28,6 +28,14 @@ media/
 
 # Static files (will be collected)
 staticfiles/
+
+# Model files (large files - will be hosted separately)
+models/
+*.onnx
+*.bin
+*.safetensors
+assets/models/
+model_files/
 
 # Backup files
 *.bak
