@@ -1,0 +1,11 @@
+{
+  "platform": "django",
+  "app": "tiktrue-backend",
+  "port": 8000,
+  "build": {
+    "commands": [
+      "python manage.py collectstatic --noinput",
+      "python manage.py migrate"
+    ]
+  }
+}
