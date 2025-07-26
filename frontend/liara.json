@@ -1,0 +1,11 @@
+{
+  "platform": "static",
+  "app": "tiktrue-frontend",
+  "build": {
+    "command": "npm run build",
+    "output": "build"
+  },
+  "static": {
+    "spa": true
+  }
+}
