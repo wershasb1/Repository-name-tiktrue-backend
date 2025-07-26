@@ -14,12 +14,10 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = [
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + [
     'tiktrue-backend.liara.run',
     'tiktrue.com',
     'www.tiktrue.com',
-    'localhost',
-    '127.0.0.1',
 ]
 
 # Application definition
@@ -142,11 +140,10 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(',') + [
     "https://tiktrue.com",
     "https://www.tiktrue.com",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "https://tiktrue-frontend.liara.run",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

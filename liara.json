@@ -1,7 +1,7 @@
 {
   "django": {
     "mirror": true,
-    "pythonVersion": "3.11",
+    "pythonVersion": "3.10",
     "timezone": "Asia/Tehran",
     "compileMessages": false,
     "modifySettings": true,
