@@ -36,6 +36,11 @@ models/
 *.safetensors
 assets/models/
 model_files/
+assets/encryption
+# Virtual environment (should not be in git)
+.venv/
+venv/
+env/
 
 # Backup files
 *.bak

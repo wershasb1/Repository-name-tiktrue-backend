@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+monitoring.db
+
+# Certificates and Keys
+certs/
+temp/
+*.key
+*.pem
+
+# Build artifacts
+build/
+dist/
+installer/
+temp_obfuscation/
+
+# Test results
+*_test_report*.json
+*_diagnostic_report*.json
+validation_report.json
+performance_load_test_results.json
+e2e_workflow_test_results.json
+comprehensive_*.json
+project_analysis_report.json
+build_verification_report.json
+installer_test_report.json
+
+# Spec files
+*.spec
+
+# Cache
+.pytest_cache/
+
+# Kiro
+.kiro/
+.selected_model
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp/
+sessions/
+
+# Frontend node_modules (if not in separate repo)
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Backend specific
+backend/db.sqlite3
+backend/__pycache__/
+backend/*/__pycache__/
+backend/*/*/__pycache__/
+backend/*/*/*/__pycache__/
