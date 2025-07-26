@@ -7,5 +7,6 @@
   },
   "static": {
     "spa": true
-  }
+  },
+  "port": 80
 }
