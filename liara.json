@@ -5,6 +5,10 @@
     "timezone": "Asia/Tehran",
     "compileMessages": false,
     "modifySettings": true,
-    "geospatial": false
+    "geospatial": false,
+    "collectStatic": true
+  },
+  "build": {
+    "buildCommand": "python manage.py collectstatic --noinput"
   }
 }
