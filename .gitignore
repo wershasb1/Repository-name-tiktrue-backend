@@ -21,6 +21,9 @@ wheels/
 *.egg
 MANIFEST
 
+# Desktop requirements (keep separate from web requirements)
+# desktop_requirements.txt
+
 # Virtual Environment
 .venv/
 venv/
