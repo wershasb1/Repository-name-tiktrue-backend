@@ -145,6 +145,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "https://tiktrue.com",
     "https://www.tiktrue.com",
+    "https://tiktrue-frontend.liara.run",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
