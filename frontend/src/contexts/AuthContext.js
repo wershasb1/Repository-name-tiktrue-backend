@@ -13,7 +13,7 @@ export const useAuth = () => {
 };
 
 // Configure axios defaults
-axios.defaults.baseURL = 'https://tiktrue-backend.liara.run/api/v1';
+axios.defaults.baseURL = 'https://api.tiktrue.com/api/v1';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
