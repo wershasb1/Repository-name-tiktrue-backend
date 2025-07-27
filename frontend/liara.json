@@ -1,5 +1,5 @@
 {
-  "platform": "static",
+  "platform": "react",
   "app": "tiktrue-frontend",
   "build": {
     "command": "npm run build",
