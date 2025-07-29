@@ -1,0 +1,381 @@
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to rollback'
+        required: true
+        type: choice
+        options:
+          - backend
+          - frontend
+          - both
+      rollback_type:
+        description: 'Type of rollback'
+        required: true
+        type: choice
+        options:
+          - previous_commit
+          - specific_commit
+          - last_known_good
+      commit_sha:
+        description: 'Specific commit SHA (if rollback_type is specific_commit)'
+        required: false
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '22'
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    outputs:
+      backend_rollback: ${{ steps.validation.outputs.backend_rollback }}
+      frontend_rollback: ${{ steps.validation.outputs.frontend_rollback }}
+      target_commit: ${{ steps.validation.outputs.target_commit }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate rollback parameters
+        id: validation
+        run: |
+          echo "🔍 Validating rollback request..."
+          
+          # Determine what to rollback
+          if [[ "${{ github.event.inputs.component }}" == "backend" || "${{ github.event.inputs.component }}" == "both" ]]; then
+            echo "backend_rollback=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_rollback=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "${{ github.event.inputs.component }}" == "frontend" || "${{ github.event.inputs.component }}" == "both" ]]; then
+            echo "frontend_rollback=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_rollback=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Determine target commit
+          case "${{ github.event.inputs.rollback_type }}" in
+            "previous_commit")
+              TARGET_COMMIT=$(git rev-parse HEAD~1)
+              echo "🎯 Rolling back to previous commit: $TARGET_COMMIT"
+              ;;
+            "specific_commit")
+              TARGET_COMMIT="${{ github.event.inputs.commit_sha }}"
+              if [[ -z "$TARGET_COMMIT" ]]; then
+                echo "❌ Specific commit SHA is required for specific_commit rollback type"
+                exit 1
+              fi
+              echo "🎯 Rolling back to specific commit: $TARGET_COMMIT"
+              ;;
+            "last_known_good")
+              # Find last successful deployment
+              TARGET_COMMIT=$(git log --oneline --grep="deployment.*successful" -1 --format="%H" || git rev-parse HEAD~1)
+              echo "🎯 Rolling back to last known good: $TARGET_COMMIT"
+              ;;
+          esac
+          
+          # Validate commit exists
+          if ! git cat-file -e "$TARGET_COMMIT"; then
+            echo "❌ Target commit $TARGET_COMMIT does not exist"
+            exit 1
+          fi
+          
+          echo "target_commit=$TARGET_COMMIT" >> $GITHUB_OUTPUT
+          
+          echo "✅ Rollback validation completed"
+
+      - name: Create rollback summary
+        run: |
+          echo "## 🔄 Rollback Request Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Component**: ${{ github.event.inputs.component }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback Type**: ${{ github.event.inputs.rollback_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Commit**: ${{ steps.validation.outputs.target_commit }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason**: ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Requested by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+
+  rollback-backend:
+    name: Rollback Backend
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.backend_rollback == 'true'
+    
+    environment:
+      name: production
+      url: https://tiktrue-backend.liara.run
+    
+    steps:
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-rollback.outputs.target_commit }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Validate backend at target commit
+        working-directory: ./backend
+        run: |
+          echo "🔍 Validating backend at target commit..."
+          
+          # Install dependencies
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+          # Run basic checks
+          export SECRET_KEY="rollback-validation-key"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///rollback_check.db"
+          python manage.py check --deploy
+          
+          echo "✅ Backend validation passed"
+
+      - name: Setup Node.js for Liara CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Liara CLI
+        run: |
+          npm install -g @liara/cli
+
+      - name: Login to Liara
+        run: |
+          liara login --api-token ${{ secrets.LIARA_API_TOKEN }}
+
+      - name: Deploy rollback to Liara
+        working-directory: ./backend
+        run: |
+          echo "🚀 Deploying backend rollback to Liara..."
+          liara deploy --app tiktrue-backend --platform django --detach
+
+      - name: Wait for rollback deployment
+        run: |
+          echo "⏳ Waiting for rollback deployment to complete..."
+          sleep 90
+
+      - name: Verify rollback health
+        run: |
+          echo "🏥 Verifying backend health after rollback..."
+          
+          for i in {1..15}; do
+            echo "Health check attempt $i/15..."
+            if curl -f -s https://tiktrue-backend.liara.run/health/; then
+              echo "✅ Backend rollback health check passed"
+              break
+            fi
+            if [ $i -eq 15 ]; then
+              echo "❌ Backend rollback health check failed after 15 attempts"
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Test critical endpoints
+        run: |
+          echo "🧪 Testing critical backend endpoints..."
+          
+          # Test admin endpoint
+          if curl -f -s https://tiktrue-backend.liara.run/admin/ > /dev/null; then
+            echo "✅ Admin endpoint accessible"
+          else
+            echo "⚠️ Admin endpoint not accessible"
+          fi
+          
+          # Test API endpoints
+          if curl -f -s https://tiktrue-backend.liara.run/api/v1/ > /dev/null; then
+            echo "✅ API endpoints accessible"
+          else
+            echo "⚠️ API endpoints not accessible"
+          fi
+
+  rollback-frontend:
+    name: Rollback Frontend
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.frontend_rollback == 'true'
+    
+    environment:
+      name: production
+      url: https://tiktrue-frontend.liara.run
+    
+    steps:
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-rollback.outputs.target_commit }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate frontend at target commit
+        working-directory: ./frontend
+        run: |
+          echo "🔍 Validating frontend at target commit..."
+          
+          # Install dependencies
+          npm ci --prefer-offline --no-audit
+          
+          # Test build
+          npm run build
+          
+          echo "✅ Frontend validation passed"
+
+      - name: Install Liara CLI
+        run: |
+          npm install -g @liara/cli
+
+      - name: Login to Liara
+        run: |
+          liara login --api-token ${{ secrets.LIARA_API_TOKEN }}
+
+      - name: Deploy rollback to Liara
+        working-directory: ./frontend
+        run: |
+          echo "🚀 Deploying frontend rollback to Liara..."
+          liara deploy --app tiktrue-frontend --platform react --detach
+
+      - name: Wait for rollback deployment
+        run: |
+          echo "⏳ Waiting for rollback deployment to complete..."
+          sleep 90
+
+      - name: Verify rollback health
+        run: |
+          echo "🏥 Verifying frontend health after rollback..."
+          
+          for i in {1..15}; do
+            echo "Health check attempt $i/15..."
+            if curl -f -s https://tiktrue-frontend.liara.run/ > /dev/null; then
+              echo "✅ Frontend rollback health check passed"
+              break
+            fi
+            if [ $i -eq 15 ]; then
+              echo "❌ Frontend rollback health check failed after 15 attempts"
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Test frontend functionality
+        run: |
+          echo "🧪 Testing frontend functionality..."
+          
+          # Test main page
+          if curl -f -s https://tiktrue-frontend.liara.run/ | grep -q "TikTrue"; then
+            echo "✅ Main page loads correctly"
+          else
+            echo "⚠️ Main page may have issues"
+          fi
+          
+          # Test static assets
+          if curl -f -s https://tiktrue-frontend.liara.run/static/css/ > /dev/null 2>&1; then
+            echo "✅ CSS assets accessible"
+          else
+            echo "⚠️ CSS assets may have issues"
+          fi
+
+  post-rollback:
+    name: Post-Rollback Actions
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, rollback-backend, rollback-frontend]
+    if: always() && needs.validate-rollback.result == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create rollback report
+        run: |
+          echo "## 📋 Rollback Execution Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback Status**: ${{ (needs.rollback-backend.result == 'success' || needs.rollback-backend.result == 'skipped') && (needs.rollback-frontend.result == 'success' || needs.rollback-frontend.result == 'skipped') && '✅ Successful' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Component**: ${{ github.event.inputs.component }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Commit**: ${{ needs.validate-rollback.outputs.target_commit }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason**: ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Executed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completion Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Component Status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend**: ${{ needs.rollback-backend.result == 'success' && '✅ Rolled back successfully' || needs.rollback-backend.result == 'skipped' && '⏭️ Skipped' || '❌ Rollback failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend**: ${{ needs.rollback-frontend.result == 'success' && '✅ Rolled back successfully' || needs.rollback-frontend.result == 'skipped' && '⏭️ Skipped' || '❌ Rollback failed' }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create rollback issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const backendStatus = '${{ needs.rollback-backend.result }}';
+            const frontendStatus = '${{ needs.rollback-frontend.result }}';
+            const overallSuccess = (backendStatus === 'success' || backendStatus === 'skipped') && 
+                                 (frontendStatus === 'success' || frontendStatus === 'skipped');
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔄 ${overallSuccess ? 'Successful' : 'Failed'} Rollback - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## Rollback Execution Report
+              
+              **Status**: ${overallSuccess ? '✅ Successful' : '❌ Failed'}
+              **Component**: ${{ github.event.inputs.component }}
+              **Rollback Type**: ${{ github.event.inputs.rollback_type }}
+              **Target Commit**: ${{ needs.validate-rollback.outputs.target_commit }}
+              **Reason**: ${{ github.event.inputs.reason }}
+              **Executed by**: ${{ github.actor }}
+              **Time**: ${new Date().toISOString()}
+              
+              ### Component Results
+              - **Backend**: ${backendStatus === 'success' ? '✅ Success' : backendStatus === 'skipped' ? '⏭️ Skipped' : '❌ Failed'}
+              - **Frontend**: ${frontendStatus === 'success' ? '✅ Success' : frontendStatus === 'skipped' ? '⏭️ Skipped' : '❌ Failed'}
+              
+              ### Post-Rollback Actions
+              ${overallSuccess ? `
+              ✅ **Rollback completed successfully**
+              - Monitor application performance
+              - Verify all functionality works as expected
+              - Plan forward fix for the original issue
+              ` : `
+              ❌ **Rollback failed**
+              - Immediate investigation required
+              - Check deployment logs for errors
+              - Consider manual intervention
+              - Escalate to senior team members
+              `}
+              
+              ### Links
+              - [Rollback Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+              - [Backend URL](https://tiktrue-backend.liara.run)
+              - [Frontend URL](https://tiktrue-frontend.liara.run)
+              
+              ---
+              *This report was automatically generated by the rollback system.*
+              `,
+              labels: ['rollback', 'deployment', overallSuccess ? 'resolved' : 'urgent']
+            });
+
+      - name: Notify team
+        run: |
+          echo "📢 Rollback completed. Team has been notified via GitHub issue."
+          echo "🔍 Please monitor the applications closely for the next few hours."
+          echo "📊 Review application metrics and logs for any anomalies."

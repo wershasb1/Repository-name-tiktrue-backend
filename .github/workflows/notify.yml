@@ -1,0 +1,260 @@
+name: Notification System
+
+on:
+  workflow_run:
+    workflows: ["Backend Deployment", "Frontend Deployment", "Security Scanning"]
+    types: [completed]
+  schedule:
+    # Daily summary at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      notification_type:
+        description: 'Type of notification to send'
+        required: true
+        default: 'summary'
+        type: choice
+        options:
+          - summary
+          - test
+          - alert
+
+jobs:
+  workflow-notification:
+    name: Workflow Status Notification
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get workflow information
+        id: workflow-info
+        run: |
+          echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
+          echo "workflow_status=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
+          echo "workflow_url=${{ github.event.workflow_run.html_url }}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+
+      - name: Create success notification
+        if: github.event.workflow_run.conclusion == 'success'
+        run: |
+          echo "## ✅ Workflow Success Notification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow**: ${{ steps.workflow-info.outputs.workflow_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ steps.workflow-info.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ steps.workflow-info.outputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View Workflow Run](${{ steps.workflow-info.outputs.workflow_url }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create failure notification
+        if: github.event.workflow_run.conclusion == 'failure'
+        run: |
+          echo "## ❌ Workflow Failure Notification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow**: ${{ steps.workflow-info.outputs.workflow_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ❌ Failed" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ steps.workflow-info.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ steps.workflow-info.outputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View Workflow Run](${{ steps.workflow-info.outputs.workflow_url }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create GitHub issue for critical failures
+        if: github.event.workflow_run.conclusion == 'failure' && (github.event.workflow_run.name == 'Backend Deployment' || github.event.workflow_run.name == 'Frontend Deployment')
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const workflowName = '${{ steps.workflow-info.outputs.workflow_name }}';
+            const workflowUrl = '${{ steps.workflow-info.outputs.workflow_url }}';
+            const commitSha = '${{ steps.workflow-info.outputs.commit_sha }}';
+            const branch = '${{ steps.workflow-info.outputs.branch }}';
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 ${workflowName} Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## ${workflowName} Failure Alert
+              
+              **Status**: ❌ Failed
+              **Branch**: ${branch}
+              **Commit**: ${commitSha}
+              **Time**: ${new Date().toISOString()}
+              
+              **Workflow Details**:
+              - [View Failed Run](${workflowUrl})
+              - Check logs for detailed error information
+              - Verify environment variables and secrets
+              
+              **Immediate Actions Required**:
+              1. 🔍 Review the workflow logs
+              2. 🛠️ Fix identified issues
+              3. 🔄 Re-run the workflow
+              4. 📊 Monitor deployment status
+              
+              **Escalation**:
+              If this issue persists, please escalate to the DevOps team.
+              
+              ---
+              *This issue was automatically created by the notification system.*
+              `,
+              labels: ['bug', 'deployment', 'urgent', 'auto-created']
+            });
+
+  daily-summary:
+    name: Daily Summary Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get recent workflow runs
+        id: workflow-runs
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 50,
+              created: `>${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}`
+            });
+            
+            const summary = {
+              total: runs.total_count,
+              success: runs.workflow_runs.filter(run => run.conclusion === 'success').length,
+              failure: runs.workflow_runs.filter(run => run.conclusion === 'failure').length,
+              cancelled: runs.workflow_runs.filter(run => run.conclusion === 'cancelled').length,
+              in_progress: runs.workflow_runs.filter(run => run.status === 'in_progress').length
+            };
+            
+            core.setOutput('summary', JSON.stringify(summary));
+            core.setOutput('runs', JSON.stringify(runs.workflow_runs.slice(0, 10)));
+
+      - name: Create daily summary
+        run: |
+          SUMMARY='${{ steps.workflow-runs.outputs.summary }}'
+          RUNS='${{ steps.workflow-runs.outputs.runs }}'
+          
+          echo "## 📊 Daily CI/CD Summary - $(date -u +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Parse summary JSON
+          TOTAL=$(echo $SUMMARY | jq -r '.total')
+          SUCCESS=$(echo $SUMMARY | jq -r '.success')
+          FAILURE=$(echo $SUMMARY | jq -r '.failure')
+          CANCELLED=$(echo $SUMMARY | jq -r '.cancelled')
+          IN_PROGRESS=$(echo $SUMMARY | jq -r '.in_progress')
+          
+          echo "### 📈 Workflow Statistics (Last 24 Hours)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Runs**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **✅ Successful**: $SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "- **❌ Failed**: $FAILURE" >> $GITHUB_STEP_SUMMARY
+          echo "- **⏹️ Cancelled**: $CANCELLED" >> $GITHUB_STEP_SUMMARY
+          echo "- **🔄 In Progress**: $IN_PROGRESS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Calculate success rate
+          if [ $TOTAL -gt 0 ]; then
+            SUCCESS_RATE=$(echo "scale=1; $SUCCESS * 100 / $TOTAL" | bc)
+            echo "**Success Rate**: ${SUCCESS_RATE}%" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Success Rate**: N/A (No runs)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Recent runs
+          echo "### 🕐 Recent Workflow Runs" >> $GITHUB_STEP_SUMMARY
+          echo "| Workflow | Status | Branch | Time |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|--------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          echo $RUNS | jq -r '.[] | "| \(.name) | \(.conclusion // .status) | \(.head_branch) | \(.created_at) |"' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for concerning patterns
+        run: |
+          SUMMARY='${{ steps.workflow-runs.outputs.summary }}'
+          
+          FAILURE=$(echo $SUMMARY | jq -r '.failure')
+          TOTAL=$(echo $SUMMARY | jq -r '.total')
+          
+          echo "## 🚨 Health Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check failure rate
+          if [ $TOTAL -gt 0 ]; then
+            FAILURE_RATE=$(echo "scale=1; $FAILURE * 100 / $TOTAL" | bc)
+            if (( $(echo "$FAILURE_RATE > 20" | bc -l) )); then
+              echo "⚠️ **High Failure Rate**: ${FAILURE_RATE}% - Investigation recommended" >> $GITHUB_STEP_SUMMARY
+            elif (( $(echo "$FAILURE_RATE > 10" | bc -l) )); then
+              echo "⚠️ **Elevated Failure Rate**: ${FAILURE_RATE}% - Monitor closely" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ **Healthy Failure Rate**: ${FAILURE_RATE}%" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+  test-notification:
+    name: Test Notification
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.notification_type == 'test'
+    
+    steps:
+      - name: Send test notification
+        run: |
+          echo "## 🧪 Test Notification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This is a test notification to verify the notification system is working correctly." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+
+  alert-notification:
+    name: Alert Notification
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.notification_type == 'alert'
+    
+    steps:
+      - name: Create alert issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Manual Alert - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## Manual Alert Notification
+              
+              **Triggered by**: ${{ github.actor }}
+              **Time**: ${new Date().toISOString()}
+              **Repository**: ${{ github.repository }}
+              
+              This is a manual alert notification triggered through the workflow dispatch.
+              
+              **Please review**:
+              - Recent workflow failures
+              - System health metrics
+              - Security scan results
+              - Deployment status
+              
+              ---
+              *This alert was manually triggered and requires immediate attention.*
+              `,
+              labels: ['alert', 'manual', 'urgent']
+            });
+
+      - name: Create alert summary
+        run: |
+          echo "## 🚨 Alert Notification Sent" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "A manual alert has been created and relevant stakeholders have been notified." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
