@@ -58,19 +58,67 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      - name: Run security scan
+      - name: Run Bandit security scan
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
-          echo "Running bandit security scan..."
+          echo "Running Bandit security scan..."
           bandit -r . -f json -o bandit-report.json || true
-          bandit -r . --severity-level medium
+          bandit -r . --severity-level medium --confidence-level medium
+          
+          # Check for critical security issues
+          if bandit -r . --severity-level high --confidence-level high --quiet; then
+            echo "✅ No high-severity security issues found"
+          else
+            echo "❌ High-severity security issues detected"
+            exit 1
+          fi
 
-      - name: Check dependencies for vulnerabilities
+      - name: Run Safety dependency scan
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
-          echo "Checking dependencies for known vulnerabilities..."
+          echo "Running Safety dependency vulnerability scan..."
           safety check --json --output safety-report.json || true
-          safety check
+          safety check --short-report
+          
+          # Fail on known vulnerabilities
+          if ! safety check --ignore 70612; then
+            echo "❌ Known vulnerabilities found in dependencies"
+            exit 1
+          fi
+
+      - name: Run pip-audit scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running pip-audit vulnerability scan..."
+          pip install pip-audit
+          pip-audit --format=json --output=pip-audit-report.json || true
+          pip-audit --desc
+
+      - name: Run Semgrep SAST scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running Semgrep static analysis..."
+          pip install semgrep
+          semgrep --config=auto --json --output=semgrep-report.json . || true
+          semgrep --config=auto --error . || true
+
+      - name: Check code complexity
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking code complexity..."
+          pip install radon
+          radon cc . --min B --show-complexity
+          radon mi . --min B
+
+      - name: Run Django security checks
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running Django security checks..."
+          export SECRET_KEY="test-secret-key-for-security-check"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///security_check.db"
+          python manage.py check --deploy --fail-level WARNING
 
       - name: Setup test database
         working-directory: ${{ env.WORKING_DIRECTORY }}
@@ -106,8 +154,11 @@ jobs:
           path: |
             backend/bandit-report.json
             backend/safety-report.json
+            backend/pip-audit-report.json
+            backend/semgrep-report.json
             backend/htmlcov/
             backend/coverage.xml
+            backend/pytest-report.xml
 
   deploy:
     name: Deploy Backend

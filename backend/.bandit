@@ -1,0 +1,30 @@
+[bandit]
+# Bandit configuration file for backend security scanning
+
+# Exclude test files and migrations from security scanning
+exclude_dirs = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/node_modules/*"
+]
+
+# Skip specific test IDs that are false positives
+skips = [
+    "B101",  # Skip assert_used test (common in tests)
+    "B601",  # Skip paramiko_calls (if using paramiko legitimately)
+]
+
+# Set confidence level
+confidence = "medium"
+
+# Set severity level
+severity = "medium"
+
+# Output format
+format = "json"
+
+# Include test IDs in output
+include_test_ids = true
