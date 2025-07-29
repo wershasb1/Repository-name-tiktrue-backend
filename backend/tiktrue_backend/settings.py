@@ -82,11 +82,11 @@ if os.environ.get('DATABASE_URL'):
         )
     }
 else:
-    # Development database (SQLite)
+    # Development database (SQLite) - Fixed for Liara deployment
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': '/tmp/db.sqlite3',  # Use /tmp for writable directory in Liara
         }
     }
 

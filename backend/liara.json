@@ -20,7 +20,6 @@
   "environments": {
     "SECRET_KEY": "django-insecure-your-secret-key-here-change-in-production-123456789",
     "DEBUG": "False",
-    "DATABASE_URL": "sqlite:///db.sqlite3",
     "CORS_ALLOWED_ORIGINS": "https://tiktrue-frontend.liara.run,https://tiktrue.com,https://www.tiktrue.com",
     "ALLOWED_HOSTS": "api.tiktrue.com,tiktrue-backend.liara.run"
   }
