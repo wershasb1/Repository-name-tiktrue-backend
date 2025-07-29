@@ -1,0 +1,317 @@
+# TikTrue Database Configuration Template
+# PostgreSQL configuration for Liara deployment
+
+# =============================================================================
+# LIARA POSTGRESQL CONFIGURATION
+# =============================================================================
+
+# Database URL format (automatically provided by Liara)
+# postgresql://username:password@host:port/database_name
+# Example: postgresql://tiktrue_user:secure_password@db.liara.ir:5432/tiktrue_production
+
+# Liara automatically provides this as DATABASE_URL environment variable
+# when you add a PostgreSQL database to your app
+
+# =============================================================================
+# DJANGO DATABASE SETTINGS (settings.py)
+# =============================================================================
+
+import dj_database_url
+
+# Primary database configuration
+DATABASES = {
+    'default': dj_database_url.config(
+        default='sqlite:///db.sqlite3',  # Fallback for local development
+        conn_max_age=600,                # Connection pooling (10 minutes)
+        conn_health_checks=True,         # Enable connection health checks
+    )
+}
+
+# Database connection options
+DATABASES['default']['OPTIONS'] = {
+    'MAX_CONNS': 20,           # Maximum connections in pool
+    'MIN_CONNS': 5,            # Minimum connections in pool
+    'sslmode': 'require',      # Require SSL connection
+}
+
+# =============================================================================
+# PRODUCTION DATABASE SETTINGS
+# =============================================================================
+
+# For production, ensure these settings in Django settings.py:
+
+# Connection pooling settings
+CONN_MAX_AGE = 600  # 10 minutes
+CONN_HEALTH_CHECKS = True
+
+# Database connection retry settings
+DATABASE_CONNECTION_RETRY_ATTEMPTS = 3
+DATABASE_CONNECTION_RETRY_DELAY = 1  # seconds
+
+# Database timeout settings
+DATABASE_TIMEOUT = 30  # seconds
+
+# =============================================================================
+# DATABASE PERFORMANCE OPTIMIZATION
+# =============================================================================
+
+# Connection pooling with django-db-pool (optional)
+# pip install django-db-pool
+
+# DATABASES['default']['ENGINE'] = 'django_db_pool.backends.postgresql'
+# DATABASES['default']['POOL_OPTIONS'] = {
+#     'POOL_SIZE': 10,
+#     'MAX_OVERFLOW': 10,
+#     'POOL_RECYCLE': 24 * 60 * 60,  # 24 hours
+# }
+
+# =============================================================================
+# CACHING CONFIGURATION
+# =============================================================================
+
+# Database caching (using PostgreSQL)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'cache_table',
+        'TIMEOUT': 300,  # 5 minutes
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        }
+    }
+}
+
+# Redis caching (if using Redis)
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': 'redis://redis-server:6379/1',
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#         }
+#     }
+# }
+
+# =============================================================================
+# SESSION CONFIGURATION
+# =============================================================================
+
+# Database sessions (default)
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400  # 24 hours
+SESSION_SAVE_EVERY_REQUEST = False
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Cached database sessions (better performance)
+# SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
+
+# =============================================================================
+# DATABASE MIGRATION SETTINGS
+# =============================================================================
+
+# Migration settings for production
+MIGRATION_MODULES = {}
+
+# Disable migrations in testing
+# if 'test' in sys.argv:
+#     MIGRATION_MODULES = {
+#         'accounts': None,
+#         'licenses': None,
+#         'models_api': None,
+#     }
+
+# =============================================================================
+# LOCAL DEVELOPMENT DATABASE
+# =============================================================================
+
+# For local development with PostgreSQL:
+# 1. Install PostgreSQL locally
+# 2. Create database: createdb tiktrue_dev
+# 3. Create user: createuser -P tiktrue_user
+# 4. Grant privileges: GRANT ALL PRIVILEGES ON DATABASE tiktrue_dev TO tiktrue_user;
+# 5. Set DATABASE_URL: postgresql://tiktrue_user:password@localhost:5432/tiktrue_dev
+
+# For local development with SQLite (simpler):
+# DATABASE_URL=sqlite:///db.sqlite3
+
+# =============================================================================
+# DATABASE BACKUP CONFIGURATION
+# =============================================================================
+
+# Liara automatic backups (configure in dashboard):
+# - Go to Database → Backups
+# - Schedule daily backups
+# - Set retention period (7-30 days recommended)
+# - Test restore procedure
+
+# Manual backup commands:
+# liara db backup create --app tiktrue-backend
+# liara db backup list --app tiktrue-backend
+# liara db backup restore <backup-id> --app tiktrue-backend
+
+# =============================================================================
+# DATABASE MONITORING
+# =============================================================================
+
+# Enable query logging in development
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'loggers': {
+#         'django.db.backends': {
+#             'handlers': ['console'],
+#             'level': 'DEBUG',
+#         },
+#     },
+# }
+
+# Database connection monitoring
+# Add to middleware for connection monitoring:
+# class DatabaseConnectionMiddleware:
+#     def __init__(self, get_response):
+#         self.get_response = get_response
+#
+#     def __call__(self, request):
+#         from django.db import connection
+#         response = self.get_response(request)
+#         print(f"Database queries: {len(connection.queries)}")
+#         return response
+
+# =============================================================================
+# DATABASE SECURITY
+# =============================================================================
+
+# Security settings for production:
+# 1. Use strong database passwords
+# 2. Enable SSL connections (sslmode='require')
+# 3. Limit database user privileges
+# 4. Regular security updates
+# 5. Monitor database access logs
+# 6. Use connection pooling to prevent connection exhaustion
+
+# Database user permissions (PostgreSQL):
+# CREATE USER tiktrue_app WITH PASSWORD 'secure_password';
+# GRANT CONNECT ON DATABASE tiktrue_production TO tiktrue_app;
+# GRANT USAGE ON SCHEMA public TO tiktrue_app;
+# GRANT CREATE ON SCHEMA public TO tiktrue_app;
+# GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tiktrue_app;
+# GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tiktrue_app;
+
+# =============================================================================
+# TESTING DATABASE CONFIGURATION
+# =============================================================================
+
+# Test database settings (use in-memory SQLite for speed)
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
+
+# =============================================================================
+# DATABASE INITIALIZATION COMMANDS
+# =============================================================================
+
+# Commands to run after database setup:
+
+# 1. Run migrations:
+# python manage.py migrate
+
+# 2. Create superuser:
+# python manage.py createsuperuser
+
+# 3. Create cache table (if using database caching):
+# python manage.py createcachetable
+
+# 4. Load initial data (if available):
+# python manage.py loaddata initial_data.json
+
+# 5. Collect static files:
+# python manage.py collectstatic --noinput
+
+# =============================================================================
+# TROUBLESHOOTING
+# =============================================================================
+
+# Common database issues and solutions:
+
+# 1. Connection refused:
+#    - Check DATABASE_URL format
+#    - Verify database is running: liara db list --app tiktrue-backend
+#    - Check network connectivity
+
+# 2. Authentication failed:
+#    - Verify username/password in DATABASE_URL
+#    - Check user permissions in database
+
+# 3. SSL connection required:
+#    - Add sslmode=require to connection options
+#    - Ensure SSL is enabled on database server
+
+# 4. Too many connections:
+#    - Implement connection pooling
+#    - Reduce CONN_MAX_AGE
+#    - Monitor connection usage
+
+# 5. Slow queries:
+#    - Add database indexes
+#    - Optimize Django ORM queries
+#    - Use select_related() and prefetch_related()
+#    - Enable query logging to identify slow queries
+
+# =============================================================================
+# MAINTENANCE COMMANDS
+# =============================================================================
+
+# Regular maintenance tasks:
+
+# 1. Database vacuum (PostgreSQL):
+# python manage.py dbshell
+# VACUUM ANALYZE;
+
+# 2. Check database size:
+# SELECT pg_size_pretty(pg_database_size('database_name'));
+
+# 3. Monitor active connections:
+# SELECT count(*) FROM pg_stat_activity;
+
+# 4. Check table sizes:
+# SELECT schemaname,tablename,attname,n_distinct,correlation FROM pg_stats;
+
+# 5. Backup verification:
+# liara db backup list --app tiktrue-backend
+# Test restore in staging environment
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC CONFIGURATIONS
+# =============================================================================
+
+# Production:
+# - Use PostgreSQL with connection pooling
+# - Enable SSL connections
+# - Configure automatic backups
+# - Monitor performance metrics
+# - Use database caching
+
+# Staging:
+# - Use smaller PostgreSQL instance
+# - Same configuration as production
+# - Test migrations and data changes
+# - Restore from production backups for testing
+
+# Development:
+# - Use local PostgreSQL or SQLite
+# - Enable query logging
+# - Use test data fixtures
+# - Faster, less secure settings
+
+# Testing:
+# - Use in-memory SQLite
+# - Disable migrations for speed
+# - Use test-specific fixtures
+# - Parallel test execution

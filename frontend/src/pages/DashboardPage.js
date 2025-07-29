@@ -14,7 +14,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import axios from 'axios';
+import apiService from '../services/apiService';
 import toast from 'react-hot-toast';
 
 const DashboardPage = () => {
@@ -25,17 +25,18 @@ const DashboardPage = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    fetchDownloadInfo();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
       // Fetch available models
-      const modelsResponse = await axios.get('/models/available/');
-      setModels(modelsResponse.data.models);
+      const modelsData = await apiService.models.getAvailable();
+      setModels(modelsData.models || []);
 
       // Fetch license info
-      const licenseResponse = await axios.get('/license/info/');
-      setLicense(licenseResponse.data.license);
+      const licenseData = await apiService.license.getInfo();
+      setLicense(licenseData.license || null);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       toast.error('Failed to load dashboard data');
@@ -44,10 +45,40 @@ const DashboardPage = () => {
     }
   };
 
-  const handleDownloadApp = () => {
-    // This would trigger the desktop app download
-    toast.success('Download will start shortly...');
-    // window.open('/download/tiktrue-desktop-app.exe', '_blank');
+  const [downloadInfo, setDownloadInfo] = useState(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+
+  const fetchDownloadInfo = async () => {
+    try {
+      const info = await apiService.downloads.getDesktopAppInfo();
+      setDownloadInfo(info);
+    } catch (error) {
+      console.error('Failed to fetch download info:', error);
+      // Don't show error toast here as it might be due to subscription plan
+    }
+  };
+
+  const handleDownloadApp = async (filename = 'TikTrue_Real_Build.exe', displayName = 'TikTrue-Desktop-App.exe') => {
+    if (downloadLoading) return;
+    
+    setDownloadLoading(true);
+    
+    try {
+      await apiService.downloads.triggerDesktopAppDownload(filename, displayName);
+      toast.success('Download started successfully!');
+    } catch (error) {
+      console.error('Download failed:', error);
+      
+      if (error.status === 403) {
+        toast.error('Desktop app download requires Pro or Enterprise subscription');
+      } else if (error.status === 404) {
+        toast.error('Download file not available');
+      } else {
+        toast.error('Download failed. Please try again later.');
+      }
+    } finally {
+      setDownloadLoading(false);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -176,29 +207,138 @@ const DashboardPage = () => {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
                 Desktop Application
               </h2>
-              <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20 rounded-lg p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                      TikTrue Desktop App
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">
-                      Download the desktop application to start using distributed AI models
-                    </p>
-                    <div className="flex items-center mt-2 text-sm text-gray-500 dark:text-gray-400">
-                      <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
-                      Version 1.0.0 • Windows 10/11
+              
+              {downloadInfo && downloadInfo.download_access ? (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                          TikTrue Desktop App
+                        </h3>
+                        <p className="text-gray-600 dark:text-gray-400 mt-1">
+                          Download the desktop application to start using distributed AI models
+                        </p>
+                        <div className="flex items-center mt-2 text-sm text-gray-500 dark:text-gray-400">
+                          <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                          Your plan: {downloadInfo.user_plan} • Download access enabled
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Available Versions */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {downloadInfo.available_versions?.map((version, index) => (
+                        <div key={index} className="bg-white dark:bg-dark-800 rounded-lg p-4 border border-gray-200 dark:border-dark-600">
+                          <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
+                            {version.name}
+                          </h4>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                            {version.description}
+                          </p>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            <div>Size: {version.size_mb} MB</div>
+                            <div>Version: {version.version}</div>
+                          </div>
+                          <button
+                            onClick={() => handleDownloadApp(version.filename, version.name)}
+                            disabled={downloadLoading}
+                            className="w-full btn-primary text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-50"
+                          >
+                            {downloadLoading ? (
+                              <>
+                                <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3 h-3" />
+                                Download
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <button
-                    onClick={handleDownloadApp}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    <Download className="w-5 h-5" />
-                    Download
-                  </button>
+                  
+                  {/* Installation Guide Link */}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                          Need help with installation?
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                          Check our step-by-step installation guide
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => window.open('/api/v1/downloads/installation-guide/', '_blank')}
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-1 text-sm"
+                      >
+                        <FileText className="w-4 h-4" />
+                        View Guide
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : downloadInfo && !downloadInfo.download_access ? (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-6">
+                  <div className="flex items-center">
+                    <AlertCircle className="w-8 h-8 text-yellow-500 mr-4" />
+                    <div>
+                      <h3 className="text-lg font-medium text-yellow-900 dark:text-yellow-100">
+                        Upgrade Required
+                      </h3>
+                      <p className="text-yellow-700 dark:text-yellow-300 mt-1">
+                        Desktop app download requires Pro or Enterprise subscription
+                      </p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
+                        Current plan: {user?.subscription_plan}
+                      </p>
+                      <button className="mt-3 bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" />
+                        Upgrade Plan
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20 rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                        TikTrue Desktop App
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        Download the desktop application to start using distributed AI models
+                      </p>
+                      <div className="flex items-center mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                        Version 1.0.0 • Windows 10/11
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDownloadApp()}
+                      disabled={downloadLoading}
+                      className="btn-primary flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {downloadLoading ? (
+                        <>
+                          <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin"></div>
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5" />
+                          Download
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
 
             {/* Available Models */}

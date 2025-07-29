@@ -59,29 +59,180 @@ REACT_APP_SITE_NAME=TikTrue
 
 ## Deployment
 
-### Build for Production
+### Liara Platform Deployment
+
+The TikTrue frontend is deployed on Liara using the static platform for React SPA.
+
+**Live Deployment:**
+- **Website URL**: https://tiktrue.com
+- **Platform**: Static (React SPA) on Liara
+- **Build Output**: `build/` directory
+- **SPA Routing**: Configured for React Router
+
+**Deployment Process:**
 
 ```bash
+# 1. Prepare for deployment
+cd frontend
+npm install
+
+# 2. Set up production environment
+cp .env.example .env.production
+# Edit .env.production with production settings
+
+# 3. Build for production
 npm run build
+
+# 4. Deploy to Liara
+liara deploy --platform=static --port=3000
+
+# 5. Verify deployment
+curl -I https://tiktrue.com
 ```
 
-This creates a `build` folder with optimized production files.
+### Environment Configuration
 
-### Deploy to Static Hosting
+**Required Environment Variables in Liara:**
 
-The build folder can be deployed to any static hosting service:
+```env
+# API Configuration
+REACT_APP_API_BASE_URL=https://api.tiktrue.com/api/v1
+REACT_APP_API_URL=https://api.tiktrue.com/api/v1
 
-- **Netlify**: Drag and drop the build folder
-- **Vercel**: Connect GitHub repository
-- **GitHub Pages**: Use gh-pages package
-- **Liara**: Upload build folder to static hosting
+# Site Configuration
+REACT_APP_SITE_NAME=TikTrue
+REACT_APP_ENVIRONMENT=production
 
-### Deploy to Liara (Static)
+# Build Configuration
+GENERATE_SOURCEMAP=false
+CI=false
+```
 
-1. Build the project: `npm run build`
-2. Create a new static app in Liara
-3. Upload the `build` folder
-4. Configure custom domain if needed
+**Local Development Environment (.env):**
+
+```env
+# API Configuration (for local development)
+REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+REACT_APP_API_URL=http://localhost:8000/api/v1
+
+# Site Configuration
+REACT_APP_SITE_NAME=TikTrue
+REACT_APP_ENVIRONMENT=development
+
+# Development Settings
+GENERATE_SOURCEMAP=true
+FAST_REFRESH=true
+```
+
+### Build Configuration
+
+**Liara Configuration (liara.json):**
+
+```json
+{
+  "platform": "static",
+  "app": "tiktrue-frontend",
+  "port": 3000,
+  "build": {
+    "commands": [
+      "npm install",
+      "npm run build"
+    ],
+    "output": "build"
+  },
+  "spa": true,
+  "gzip": true
+}
+```
+
+### Deployment Verification
+
+After deployment, verify these features work:
+
+```bash
+# Check website loads
+curl -I https://tiktrue.com
+
+# Check SPA routing works
+curl -I https://tiktrue.com/login
+curl -I https://tiktrue.com/register
+curl -I https://tiktrue.com/dashboard
+
+# Check API connectivity from browser console:
+# fetch('https://api.tiktrue.com/api/v1/auth/')
+```
+
+### Troubleshooting Deployment Issues
+
+**Common Problems and Solutions:**
+
+1. **Build Failures:**
+   ```bash
+   # Check for dependency issues
+   npm install --legacy-peer-deps
+   
+   # Clear cache and rebuild
+   npm run build -- --reset-cache
+   ```
+
+2. **API Connection Issues:**
+   ```bash
+   # Verify environment variables
+   liara env list --app=tiktrue-frontend
+   
+   # Check CORS settings on backend
+   curl -H "Origin: https://tiktrue.com" https://api.tiktrue.com/api/v1/auth/
+   ```
+
+3. **SPA Routing Issues:**
+   ```json
+   // Ensure liara.json has spa: true
+   {
+     "platform": "static",
+     "spa": true
+   }
+   ```
+
+4. **Static Files Not Loading:**
+   ```bash
+   # Check build output
+   ls -la build/
+   
+   # Verify public path in package.json
+   "homepage": "https://tiktrue.com"
+   ```
+
+### Performance Optimization
+
+**Build Optimization:**
+
+```bash
+# Analyze bundle size
+npm run build -- --analyze
+
+# Check for unused dependencies
+npm audit
+npx depcheck
+```
+
+**Runtime Optimization:**
+- Lazy loading for routes
+- Image optimization
+- Code splitting
+- Service worker caching
+
+### Monitoring and Logs
+
+```bash
+# View deployment logs
+liara logs --app=tiktrue-frontend
+
+# Check app status
+liara app list
+
+# Restart application
+liara restart --app=tiktrue-frontend
+```
 
 ## Project Structure
 

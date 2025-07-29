@@ -1,0 +1,824 @@
+🎯 کارکرد کلی سیستم:
+این کد یک سرور توزیع شده برای اجرای مدل‌های زبانی بزرگ (LLM) است که مدل را به ۳۳ بخش (block) تقسیم کرده و آن‌ها را روی CPU/GPU اجرا می‌کند.
+
+📚 کتابخانه‌ها و کاربردشان:
+🔧 کتابخانه‌های اصلی:
+import onnxruntime as ort        # اجرای مدل‌های ONNX روی CPU/GPU
+import websockets               # ارتباط WebSocket با کلاینت‌ها
+import asyncio                  # برنامه‌نویسی غیرهمزمان
+import numpy as np              # پردازش داده‌های tensor
+import json                     # سریال‌سازی داده‌ها
+
+🧠 کتابخانه‌های سفارشی پروژه:
+from worker_lib import CPUWorker, GPUWorker                    # اجراکننده‌های CPU/GPU
+from sequential_gpu_worker_lib import SequentialGPUWorker     # GPU worker بهینه‌سازی شده
+from scheduler_lib import StaticSplitScheduler               # تقسیم‌کننده کار بین CPU/GPU
+from serialization_utils import tensor_to_json_serializable  # تبدیل tensor به JSON
+from homf_lib import WarmStatePool                           # مدیریت cache مدل‌ها
+from paged_kv_cache_lib import PagedKVCacheManager          # مدیریت KV cache
+
+
+⚙️ مراحل کاری سیستم:
+1. راه‌اندازی (Initialization):
+# بارگذاری تنظیمات شبکه
+NETWORK_CONFIG = json.load(network_config.json)
+
+# بارگذاری متادیتای مدل (33 بلاک)
+MODEL_CHAIN_ORDER = ["block_1", "block_2", ..., "block_33"]
+
+# راه‌اندازی Workers
+CPU_WORKER = CPUWorker()      # برای پردازش روی CPU
+GPU_WORKER = SequentialGPUWorker()  # برای پردازش روی GPU
+
+# تعیین کدام بلاک روی کدام worker اجرا شود
+EXECUTION_PLAN = {"block_1": "GPU", "block_2": "CPU", ...}
+
+2. دریافت درخواست از کلاینت:
+# کلاینت درخواست می‌فرستد:
+{
+  "session_id": "user_123",
+  "step": 1,
+  "input_tensors": {
+    "input_ids": [1, 2, 3, ...],
+    "attention_mask": [1, 1, 1, ...],
+    "position_ids": [0, 1, 2, ...]
+  }
+}
+
+3. اجرای Pipeline (۳۳ بلاک):
+for block_id in MODEL_CHAIN_ORDER:  # block_1 تا block_33
+    # آماده‌سازی ورودی برای هر بلاک
+    block_inputs = prepare_block_inputs(block_id, previous_outputs)
+    
+    # تعیین worker (CPU یا GPU)
+    worker = GPU_WORKER if EXECUTION_PLAN[block_id] == "GPU" else CPU_WORKER
+    
+    # اجرای بلاک روی worker
+    result = await send_job_to_worker(worker, block_inputs)
+    
+    # اگر GPU شکست خورد، روی CPU امتحان کن (Fallback)
+    if result['status'] == 'error' and fallback_available:
+        result = await send_job_to_worker(CPU_WORKER, block_inputs)
+    
+    # آماده‌سازی خروجی برای بلاک بعدی
+    previous_outputs = result['outputs']
+
+4. مدیریت خطا و Fallback:
+# اگر GPU Worker مشکل داشت:
+if GPU_fails:
+    # خودکار به CPU برو
+    EXECUTION_PLAN[block_id] = "CPU"  
+    # سعی مجدد روی CPU
+    result = await CPU_WORKER.process(block_inputs)
+
+
+📊 خروجی‌های سیستم:
+✅ خروجی موفقیت‌آمیز:
+{
+  "status": "success",
+  "message": "Pipeline completed successfully",
+  "session_id": "user_123",
+  "step": 1,
+  "outputs": {
+    "logits": {
+      "_tensor_": true,
+      "dtype": "float16", 
+      "shape": [1, 1, 32000],
+      "data_b64": "base64_encoded_tensor_data..."
+    }
+  },
+  "execution_times": {
+    "block_1": 0.245,
+    "block_2": 0.189,
+    ...
+    "block_33": 0.312
+  },
+  "total_pipeline_time": 8.74,
+  "execution_stats": {
+    "gpu_blocks_executed": 20,
+    "cpu_blocks_executed": 13,
+    "total_fallbacks": 3,
+    "successful_fallbacks": 3
+  },
+  "fallback_events": [
+    {
+      "block_id": "block_15",
+      "from": "GPU",
+      "to": "CPU", 
+      "reason": "gpu_memory_error",
+      "success": true
+    }
+  ]
+}
+
+❌ خروجی خطا:
+{
+  "status": "error",
+  "message": "Pipeline failed at block_12: GPU memory exhausted",
+  "session_id": "user_123",
+  "failed_block": "block_12",
+  "error_type": "RuntimeError",
+  "successful_blocks": ["block_1", "block_2", ..., "block_11"],
+  "failed_blocks": [
+    {
+      "block_id": "block_12",
+      "error": "GPU memory exhausted", 
+      "execution_time": 2.45,
+      "worker": "GPU"
+    }
+  ]
+}
+
+
+🎯 مثال عملکرد:
+ورودی نمونه (از کلاینت):
+{
+  "session_id": "chat_001",
+  "step": 1,
+  "input_tensors": {
+    "input_ids": {"_tensor_": true, "data": [1, 15043, 1234, 2]},
+    "attention_mask": {"_tensor_": true, "data": [1, 1, 1, 1]},
+    "position_ids": {"_tensor_": true, "data": [0, 1, 2, 3]}
+  }
+}
+
+خروجی نمونه (به کلاینت):
+{
+  "status": "success",
+  "outputs": {
+    "logits": {
+      "_tensor_": true,
+      "shape": [1, 4, 32000],
+      "data_b64": "SGVsbG8gV29ybGQ..."
+    }
+  },
+  "total_pipeline_time": 6.84,
+  "execution_stats": {
+    "gpu_blocks_executed": 25,
+    "cpu_blocks_executed": 8,
+    "avg_block_time": 0.207
+  }
+}
+
+
+🔍 لاگ‌های سیستم:
+{"timestamp": "2025-01-20T10:30:15", "event_type": "NODE_READY", "data": {"workers": {"cpu": true, "gpu": true}}}
+{"timestamp": "2025-01-20T10:30:20", "event_type": "PIPELINE_EXECUTION_START", "data": {"blocks": 33}}
+{"timestamp": "2025-01-20T10:30:22", "event_type": "BLOCK_EXECUTION_FALLBACK", "data": {"block": "block_15", "from": "GPU", "to": "CPU"}}
+{"timestamp": "2025-01-20T10:30:28", "event_type": "PIPELINE_EXECUTION_COMPLETE", "data": {"time": 6.84}}
+
+
+🎉 خلاصه:
+این سیستم یک inference engine پیشرفته برای مدل‌های LLM است که:
+✅ مدل را به ۳۳ بخش تقسیم می‌کند
+✅ هر بخش را روی CPU یا GPU اجرا می‌کند
+✅ در صورت مشکل GPU، خودکار به CPU می‌رود
+✅ از WebSocket برای ارتباط استفاده می‌کند
+✅ آمار کامل اجرا و خطاها را ارائه می‌دهد
+✅ قابلیت اجرای همزمان چندین درخواست را دارد
+نتیجه نهایی: تولید logits (احتمالات کلمات بعدی) برای مدل زبانی! 🚀
+
+
+🔗 ارتباط با کتابخانه‌های سفارشی:
+1. 🧠 worker_lib.py - اجراکننده‌های اصلی
+from worker_lib import CPUWorker, GPUWorker
+
+# کاربرد:
+CPU_WORKER = CPUWorker(
+    name="CPUWorker",
+    max_warm_sessions=3,
+    execution_providers=['CPUExecutionProvider']
+)
+
+GPU_WORKER = GPUWorker(
+    name="GPUWorker", 
+    execution_providers=['DmlExecutionProvider', 'CPUExecutionProvider']
+)
+
+# ارسال کار:
+job = {'block_id': 'block_1', 'input_data': tensors}
+result = await send_job_to_worker(CPU_WORKER, job)
+
+چه کار می‌کند: مدل‌های ONNX را روی CPU/GPU اجرا می‌کند
+
+2. ⚡ sequential_gpu_worker_lib.py - GPU Worker بهینه
+from sequential_gpu_worker_lib import SequentialGPUWorker
+
+# کاربرد:
+GPU_WORKER = SequentialGPUWorker(
+    name="SequentialGPUWorker",
+    max_retry_attempts=3,
+    session_timeout=30.0,
+    memory_cleanup_interval=5
+)
+
+# ویژگی‌های خاص:
+- Load/Unload pattern برای جلوگیری از GPU memory leak
+- Automatic fallback از DML به CPU
+- Memory cleanup پس از هر چند بلاک
+
+چه کار می‌کند: مدیریت هوشمند GPU memory و fallback خودکار
+
+3. 📋 scheduler_lib.py - تقسیم‌کننده کار
+from scheduler_lib import StaticSplitScheduler
+
+# کاربرد:
+scheduler = StaticSplitScheduler(
+    profiling_file_path="profiling_results.json",
+    model_chain_order=["block_1", "block_2", ..., "block_33"]
+)
+
+EXECUTION_PLAN = scheduler.generate_execution_plan()
+# خروجی: {"block_1": "GPU", "block_2": "CPU", "block_3": "GPU", ...}
+
+چه کار می‌کند: تصمیم می‌گیرد کدام بلاک روی CPU و کدام روی GPU اجرا شود
+
+4. 🔄 serialization_utils.py - تبدیل داده‌ها
+from serialization_utils import tensor_to_json_serializable, json_serializable_to_tensor
+
+# تبدیل numpy tensor به JSON (برای ارسال):
+numpy_tensor = np.array([[1, 2, 3]], dtype=np.float16)
+json_data = tensor_to_json_serializable(numpy_tensor)
+# خروجی: {"_tensor_": true, "dtype": "float16", "shape": [1, 3], "data_b64": "..."}
+
+# تبدیل JSON به numpy tensor (برای دریافت):
+tensor = json_serializable_to_tensor(json_data)
+# خروجی: numpy array
+
+چه کار می‌کند: تبدیل tensor ها به فرمت JSON برای ارسال روی شبکه
+
+5. 🚀 homf_lib.py - مدیریت Cache مدل‌ها
+from homf_lib import WarmStatePool, initialize_homf_globals
+
+# کاربرد:
+GLOBAL_HOMF_POOL = WarmStatePool(
+    project_root_path=PROJECT_ROOT,
+    network_config_global=NETWORK_CONFIG,
+    model_metadata_global=metadata,
+    max_warm_sessions=5,
+    prefer_homf_format=True
+)
+
+# مزایا:
+- مدل‌ها را پیش‌بارگذاری می‌کند (warm cache)
+- از فرمت‌های بهینه‌سازی شده استفاده می‌کند
+- Load time را کاهش می‌دهد
+
+چه کار می‌کند: مدل‌ها را در memory نگه می‌دارد تا سریع‌تر لود شوند
+
+6. 💾 paged_kv_cache_lib.py - مدیریت KV Cache
+from paged_kv_cache_lib import PagedKVCacheManager, SessionPagedKVCache
+
+# کاربرد:
+GLOBAL_PAGE_MANAGER = PagedKVCacheManager(
+    initial_pages=16,
+    page_capacity_tokens=16, 
+    num_kv_heads=8,
+    head_dim=128,
+    dtype=np.float16
+)
+
+# برای هر session:
+kv_cache = SessionPagedKVCache(session_id="user_123")
+
+چه کار می‌کند: Key-Value cache برای transformer layers مدیریت می‌کند
+
+7. 📊 custom_logging.py - لاگ‌گذاری ساختاریافته
+from custom_logging import MainJsonFormatter, NODE_ID_FOR_LOGGING_HOLDER
+
+# کاربرد:
+json_formatter = MainJsonFormatter()
+console_handler.setFormatter(json_formatter)
+
+# خروجی لاگ:
+{
+  "timestamp": "2025-01-20T10:30:15",
+  "level": "INFO", 
+  "event_type": "PIPELINE_EXECUTION_START",
+  "node_id": "physical_node_1",
+  "session_id": "user_123",
+  "step": 1,
+  "data": {"total_blocks": 33}
+}
+
+چه کار می‌کند: لاگ‌ها را در فرمت JSON ساختاریافته تولید می‌کند
+
+🔄 جریان کار کامل:
+# 1. دریافت درخواست WebSocket
+async def handler(websocket):
+    data = json.loads(message)
+    
+    # 2. تبدیل JSON به tensor
+    tensors = json_serializable_to_tensor(data['input_tensors'])
+    
+    # 3. اجرای pipeline
+    result = await execute_pipeline(session_id, step, tensors)
+    
+    # 4. تبدیل tensor به JSON
+    json_output = tensor_to_json_serializable(result['outputs'])
+    
+    # 5. ارسال پاسخ
+    await websocket.send(json.dumps(json_output))
+
+# جریان داخل execute_pipeline:
+for block_id in MODEL_CHAIN_ORDER:
+    # از scheduler تصمیم بگیر: CPU یا GPU؟
+    worker_type = EXECUTION_PLAN[block_id]
+    
+    # کار را به worker ارسال کن
+    if worker_type == "GPU":
+        result = await send_job_to_worker(GPU_WORKER, job_data)
+    else:
+        result = await send_job_to_worker(CPU_WORKER, job_data)
+    
+    # اگر شکست خورد، fallback کن
+    if result['status'] == 'error':
+        result = await send_job_to_worker(CPU_WORKER, job_data)
+
+
+📋 خلاصه وابستگی‌ها:
+کتابخانه
+نقش
+ورودی
+خروجی
+worker_lib
+اجرای مدل
+tensors
+model outputs
+sequential_gpu_worker_lib
+GPU memory management
+tensors
+optimized outputs
+scheduler_lib
+تقسیم کار
+profiling data
+execution plan
+serialization_utils
+تبدیل داده
+numpy ↔ JSON
+serialized data
+homf_lib
+cache مدل‌ها
+model paths
+warm sessions
+paged_kv_cache_lib
+KV cache
+transformer states
+cached states
+custom_logging
+لاگ structured
+events
+JSON logs
+
+هدف کلی: ایجاد یک سیستم inference پایدار، قابل نظارت و بهینه برای مدل‌های LLM! 🚀
+
+
+🏗️ نمای کلی معماری {#نمای-کلی}
+ساختار کلی مدل Llama-3.1-8B:
+تعداد layers: 32 transformer layers + 1 output layer
+تعداد blocks: 33 بلاک ONNX
+Architecture: Decoder-only transformer with causal attention
+KV Cache: هر layer کش جداگانه برای key/value دارد
+تقسیم‌بندی Blocks:
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Block 1   │───▶│   Block 2   │───▶│     ...     │───▶│  Block 33   │
+│ (Layer 0 +  │    │  (Layer 1)  │    │(Layers 2-31)│    │(Output Head)│
+│ Embeddings) │    │             │    │             │    │             │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+
+🔸 Block 1: ورودی و Layer اول {#block-1}
+نقش:
+Token embedding
+Position embedding
+Attention mask preprocessing
+اولین transformer layer (layer 0)
+Inputs دقیق:
+نام
+Shape
+نوع
+توضیح
+attention_mask
+[batch_size, total_sequence_length]
+int64
+ماسک توجه (1=valid, 0=padding)
+input_ids
+[batch_size, sequence_length]
+int64
+شناسه توکن‌ها (0-128255)
+past_key_values.0.key
+[batch_size, 8, past_seq_len, 128]
+float16
+کش key layer 0 (معمولاً خالی در شروع)
+past_key_values.0.value
+[batch_size, 8, past_seq_len, 128]
+float16
+کش value layer 0 (معمولاً خالی در شروع)
+position_ids
+[batch_size, sequence_length]
+int64
+شناسه موقعیت (0, 1, 2, ...)
+
+Outputs دقیق:
+نام
+Shape
+نوع
+توضیح
+/model/ScatterND_output_0
+[batch_size, 1, total_seq_len, total_seq_len]
+float16
+ماتریس attention پردازش شده
+/model/layers.0/Add_1_output_0
+[batch_size, sequence_length, 4096]
+float16
+خروجی hidden state layer 0
+/model/layers.0/self_attn/Unsqueeze_6_output_0
+[batch_size, 1, total_seq_len, 128]
+float16
+الگوی attention key
+/model/layers.0/self_attn/Unsqueeze_7_output_0
+[batch_size, 1, total_seq_len, 128]
+float16
+الگوی attention value
+present.0.key
+[batch_size, 8, total_seq_len, 128]
+float16
+کش جدید key layer 0
+present.0.value
+[batch_size, 8, total_seq_len, 128]
+float16
+کش جدید value layer 0
+
+نمونه Shapes (batch=1, seq=10, past=0):
+python
+# Inputs
+attention_mask: [1, 10]
+input_ids: [1, 10] 
+past_key_values.0.key: [1, 8, 0, 128]    # خالی
+past_key_values.0.value: [1, 8, 0, 128]  # خالی
+position_ids: [1, 10]
+
+# Outputs  
+/model/ScatterND_output_0: [1, 1, 10, 10]
+/model/layers.0/Add_1_output_0: [1, 10, 4096]
+/model/layers.0/self_attn/Unsqueeze_6_output_0: [1, 1, 10, 128]
+/model/layers.0/self_attn/Unsqueeze_7_output_0: [1, 1, 10, 128] 
+present.0.key: [1, 8, 10, 128]
+present.0.value: [1, 8, 10, 128]
+
+🔸 Blocks میانی (2-32): Transformer Layers {#blocks-میانی}
+نقش:
+هر block یک transformer layer کامل (layers 1-31) را پیاده‌سازی می‌کند
+الگوی کلی Block N (N=2 تا 32):
+
+
+
+Inputs:
+نام
+Shape
+نوع
+منبع
+/model/ScatterND_output_0
+[batch_size, 1, total_seq_len, total_seq_len]
+float16
+از Block 1 (مشترک برای همه)
+/model/layers.0/self_attn/Unsqueeze_6_output_0
+[batch_size, 1, total_seq_len, 128]
+float16
+از Block 1 (مشترک برای همه)
+/model/layers.0/self_attn/Unsqueeze_7_output_0
+[batch_size, 1, total_seq_len, 128]
+float16
+از Block 1 (مشترک برای همه)
+/model/layers.{N-2}/Add_1_output_0
+[batch_size, sequence_length, 4096]
+float16
+از Block قبلی
+past_key_values.{N-1}.key
+[batch_size, 8, past_seq_len, 128]
+float16
+کش layer فعلی
+past_key_values.{N-1}.value
+[batch_size, 8, past_seq_len, 128]
+float16
+کش layer فعلی
+
+Outputs:
+نام
+Shape
+نوع
+مقصد
+/model/layers.{N-1}/Add_1_output_0
+[batch_size, sequence_length, 4096]
+float16
+به Block بعدی
+present.{N-1}.key
+[batch_size, 8, total_seq_len, 128]
+float16
+کش به‌روزرسانی شده
+present.{N-1}.value
+[batch_size, 8, total_seq_len, 128]
+float16
+کش به‌روزرسانی شده
+
+مثال Block 2:
+python
+# Inputs
+"/model/ScatterND_output_0": [1, 1, 10, 10]                    # از Block 1
+"/model/layers.0/self_attn/Unsqueeze_6_output_0": [1, 1, 10, 128]  # از Block 1  
+"/model/layers.0/self_attn/Unsqueeze_7_output_0": [1, 1, 10, 128]  # از Block 1
+"/model/layers.0/Add_1_output_0": [1, 10, 4096]               # از Block 1
+"past_key_values.1.key": [1, 8, 0, 128]                       # خالی
+"past_key_values.1.value": [1, 8, 0, 128]                     # خالی
+
+# Outputs
+"/model/layers.1/Add_1_output_0": [1, 10, 4096]               # به Block 3
+"present.1.key": [1, 8, 10, 128]                              # کش جدید
+"present.1.value": [1, 8, 10, 128]                            # کش جدید
+
+🔸 Block 33: خروجی نهایی {#block-33}
+نقش:
+Language modeling head
+تبدیل hidden states به logits
+تولید احتمالات توکن‌ها
+Inputs:
+نام
+Shape
+نوع
+منبع
+/model/layers.31/Add_1_output_0
+[batch_size, sequence_length, 4096]
+float16
+از Block 32
+
+Outputs:
+نام
+Shape
+نوع
+توضیح
+logits
+[batch_size, sequence_length, 128256]
+float16
+احتمالات توکن‌ها (vocab_size=128256)
+
+مثال:
+python
+# Input
+"/model/layers.31/Add_1_output_0": [1, 10, 4096]
+
+# Output  
+"logits": [1, 10, 128256]  # آخرین توکن برای generation: logits[0, -1, :]
+
+🔗 Dependency Chain کامل {#dependency-chain}
+Data Flow Pattern:
+mermaid
+graph TD
+    A[Initial Inputs] --> B[Block 1]
+    B --> B1[Global Attention Patterns]
+    B --> B2[Hidden States Layer 0]
+    B --> B3[KV Cache Layer 0]
+    
+    B1 --> C[Block 2]
+    B2 --> C
+    B3 --> C2[Past KV 1]
+    C2 --> C
+    
+    C --> C1[Hidden States Layer 1]
+    C --> C3[KV Cache Layer 1]
+    
+    C1 --> D[Block 3]
+    B1 --> D
+    C3 --> D2[Past KV 2]
+    D2 --> D
+    
+    D --> E[...]
+    E --> F[Block 32]
+    F --> F1[Hidden States Layer 31]
+    F1 --> G[Block 33]
+    G --> H[Logits]
+مسیر انتقال داده‌ها:
+Global Patterns (از Block 1 به همه):
+/model/ScatterND_output_0
+/model/layers.0/self_attn/Unsqueeze_6_output_0
+/model/layers.0/self_attn/Unsqueeze_7_output_0
+Sequential Hidden States:
+ Block 1 → /model/layers.0/Add_1_output_0 → Block 2
+Block 2 → /model/layers.1/Add_1_output_0 → Block 3
+...
+Block 32 → /model/layers.31/Add_1_output_0 → Block 33
+
+
+KV Cache Chain:
+ Block N: present.{N-1}.key/value → past_key_values.{N}.key/value (Block N+1)
+
+
+
+🔄 Data Flow Mapping {#data-flow-mapping}
+Mapping Function:
+python
+def map_block_outputs_to_next_inputs(current_block_id: int, outputs: Dict[str, np.ndarray], 
+                                   global_cache: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    """
+    نقشه‌برداری خروجی‌های یک بلاک به ورودی‌های بلاک بعدی
+    
+    Args:
+        current_block_id: شماره بلاک فعلی (1-33)
+        outputs: خروجی‌های بلاک فعلی
+        global_cache: کش global patterns از Block 1
+        
+    Returns:
+        mapped_inputs: ورودی‌های آماده برای بلاک بعدی
+    """
+    
+    next_block_id = current_block_id + 1
+    mapped_inputs = {}
+    
+    if current_block_id == 1:
+        # ذخیره global patterns برای استفاده در تمام بلاک‌ها
+        global_cache.update({
+            "/model/ScatterND_output_0": outputs["/model/ScatterND_output_0"],
+            "/model/layers.0/self_attn/Unsqueeze_6_output_0": outputs["/model/layers.0/self_attn/Unsqueeze_6_output_0"],
+            "/model/layers.0/self_attn/Unsqueeze_7_output_0": outputs["/model/layers.0/self_attn/Unsqueeze_7_output_0"]
+        })
+        
+        if next_block_id <= 32:
+            # برای Block 2
+            mapped_inputs = {
+                "/model/ScatterND_output_0": outputs["/model/ScatterND_output_0"],
+                "/model/layers.0/self_attn/Unsqueeze_6_output_0": outputs["/model/layers.0/self_attn/Unsqueeze_6_output_0"],
+                "/model/layers.0/self_attn/Unsqueeze_7_output_0": outputs["/model/layers.0/self_attn/Unsqueeze_7_output_0"],
+                "/model/layers.0/Add_1_output_0": outputs["/model/layers.0/Add_1_output_0"],
+                "past_key_values.1.key": np.zeros_like(outputs["present.0.key"])[:, :, :0, :],  # خالی
+                "past_key_values.1.value": np.zeros_like(outputs["present.0.value"])[:, :, :0, :]  # خالی
+            }
+    
+    elif 2 <= current_block_id <= 31:
+        # بلاک‌های میانی
+        layer_num = current_block_id - 1  # layer number (1-30)
+        
+        if next_block_id <= 32:
+            mapped_inputs = {
+                # Global patterns از Block 1
+                "/model/ScatterND_output_0": global_cache["/model/ScatterND_output_0"],
+                "/model/layers.0/self_attn/Unsqueeze_6_output_0": global_cache["/model/layers.0/self_attn/Unsqueeze_6_output_0"],
+                "/model/layers.0/self_attn/Unsqueeze_7_output_0": global_cache["/model/layers.0/self_attn/Unsqueeze_7_output_0"],
+                
+                # Hidden state از بلاک فعلی
+                f"/model/layers.{layer_num}/Add_1_output_0": outputs[f"/model/layers.{layer_num}/Add_1_output_0"],
+                
+                # Past KV cache (خالی برای layer جدید)
+                f"past_key_values.{next_block_id-1}.key": np.zeros_like(outputs[f"present.{layer_num}.key"])[:, :, :0, :],
+                f"past_key_values.{next_block_id-1}.value": np.zeros_like(outputs[f"present.{layer_num}.value"])[:, :, :0, :]
+            }
+        elif next_block_id == 33:
+            # برای Block 33 (فقط hidden state لازم)
+            mapped_inputs = {
+                f"/model/layers.{layer_num}/Add_1_output_0": outputs[f"/model/layers.{layer_num}/Add_1_output_0"]
+            }
+    
+    elif current_block_id == 32:
+        # Block 32 به Block 33
+        mapped_inputs = {
+            "/model/layers.31/Add_1_output_0": outputs["/model/layers.31/Add_1_output_0"]
+        }
+    
+    return mapped_inputs
+KV Cache Management:
+python
+def manage_kv_cache(block_id: int, outputs: Dict[str, np.ndarray], 
+                   kv_cache_storage: Dict[str, np.ndarray]) -> None:
+    """
+    مدیریت KV Cache برای استفاده در generation بعدی
+    
+    Args:
+        block_id: شماره بلاک (1-32)
+        outputs: خروجی‌های بلاک شامل present keys/values
+        kv_cache_storage: ذخیره‌ساز کش برای استفاده بعدی
+    """
+    
+    if block_id <= 32:
+        layer_num = block_id - 1
+        
+        # ذخیره present cache برای استفاده در generation بعدی
+        if f"present.{layer_num}.key" in outputs:
+            kv_cache_storage[f"layer_{layer_num}_key"] = outputs[f"present.{layer_num}.key"]
+            kv_cache_storage[f"layer_{layer_num}_value"] = outp
+
+
+تحلیل فایل لاگ all_blocks_test_log.txt
+این فایل لاگ، نتایج تست عملکردی هر یک از ۳۳ بلاک مدل ONNX را به صورت جداگانه (با batch_size=5, seq_len=10, past_seq=0) نشان می‌دهد.
+۱. خلاصه کلی تست (Overall Test Summary)
+تعداد کل بلاک‌های تست شده: ۳۳
+بلاک‌های موفق: ۳۳
+بلاک‌های ناموفق: ۰
+نتیجه نهایی: تمام ۳۳ بلاک با موفقیت تست شده‌اند.
+این نتایج نشان می‌دهد که هر بلاک ONNX به صورت مستقل قادر به بارگذاری، دریافت ورودی‌های ساختگی با شکل‌های صحیح و اجرای استنتاج بدون خطا است.
+۲. تحلیل جزئیات بلاک‌ها
+لاگ، جزئیات ورودی‌ها و خروجی‌های هر بلاک را از گراف ONNX و همچنین شکل‌های واقعی (Concrete Shapes) که برای ورودی‌های ساختگی استفاده شده‌اند، نشان می‌دهد. توضیحات فارسی در لاگ ممکن است به دلیل مشکلات کدگذاری کمی نامرتب باشند، اما معنی کلی آن‌ها قابل درک است.
+الف. بلاک ۱: block_1.onnx (پردازش اولیه و لایه ترنسفورمر ۰)
+این بلاک مسئول پردازش ورودی‌های اولیه مدل است.
+پارامترهای تست: batch_size=5, seq_len=10, past_seq=0
+ورودی‌های مدل (از گراف ONNX):
+attention_mask: tensor(int64), Shape: [None, None], (ماسک توجه)
+input_ids: tensor(int64), Shape: [None, None], (شناسه توکن‌ها)
+past_key_values.0.key: tensor(float16), Shape: [None, 8, None, 128], (کش key لایه ۰)
+past_key_values.0.value: tensor(float16), Shape: [None, 8, None, 128], (کش value لایه ۰)
+position_ids: tensor(int64), Shape: [None, None], (شناسه موقعیت)
+خروجی‌های مدل (از گراف ONNX):
+/model/ScatterND_output_0: tensor(float16), Shape: [None, None, None, None], (ماتریس attention پردازش شده)
+/model/layers.0/Add_1_output_0: tensor(float16), Shape: [None, None, 4096], (خروجی hidden state لایه ۰)
+/model/layers.0/self_attn/Unsqueeze_6_output_0: tensor(float16), Shape: [None, 1, None, 128], (الگوی attention key)
+/model/layers.0/self_attn/Unsqueeze_7_output_0: tensor(float16), Shape: [None, 1, None, 128], (الگوی attention value)
+present.0.key: tensor(float16), Shape: [None, 8, None, 128], (کش جدید key لایه ۰)
+present.0.value: tensor(float16), Shape: [None, 8, None, 128], (کش جدید value لایه ۰)
+ورودی‌های ساختگی ایجاد شده:
+attention_mask: Original Shape=[None, None] -> Concrete Shape=[5, 10]
+input_ids: Original Shape=[None, None] -> Concrete Shape=[5, 10]
+past_key_values.0.key: Original Shape=[None, 8, None, 128] -> Concrete Shape=[5, 8, 0, 128] (خالی، زیرا past_seq=0)
+past_key_values.0.value: Original Shape=[None, 8, None, 128] -> Concrete Shape=[5, 8, 0, 128] (خالی، زیرا past_seq=0)
+position_ids: Original Shape=[None, None] -> Concrete Shape=[5, 10]
+خروجی‌های استنتاج واقعی:
+/model/ScatterND_output_0: Shape: (5, 1, 10, 10), Dtype: float16
+/model/layers.0/Add_1_output_0: Shape: (5, 10, 4096), Dtype: float16
+/model/layers.0/self_attn/Unsqueeze_6_output_0: Shape: (5, 1, 10, 128), Dtype: float16
+/model/layers.0/self_attn/Unsqueeze_7_output_0: Shape: (5, 1, 10, 128), Dtype: float16
+present.0.key: Shape: (5, 8, 10, 128), Dtype: float16
+present.0.value: Shape: (5, 8, 10, 128), Dtype: float16
+ب. بلاک‌های میانی (۲ تا ۳۲): لایه‌های ترنسفورمر
+این بلاک‌ها لایه‌های میانی ترنسفورمر (لایه ۱ تا لایه ۳۱) را پیاده‌سازی می‌کنند. هر بلاک، خروجی hidden state و key/value caches را از لایه قبلی دریافت می‌کند و hidden state و key/value caches به‌روز شده را به لایه بعدی منتقل می‌کند.
+پارامترهای تست: batch_size=5, seq_len=10, past_seq=0 (برای هر بلاک به صورت مجزا تست شده‌اند)
+الگوی کلی ورودی‌های مدل (از گراف ONNX) برای block_N.onnx (N از ۲ تا ۳۲):
+/model/ScatterND_output_0: tensor(float16), Shape: [], (ماتریس attention پردازش شده - از Block 1)
+/model/layers.0/self_attn/Unsqueeze_6_output_0: tensor(float16), Shape: [], (الگوی attention key - از Block 1)
+/model/layers.0/self_attn/Unsqueeze_7_output_0: tensor(float16), Shape: [], (الگوی attention value - از Block 1)
+/model/layers.{N-2}/Add_1_output_0: tensor(float16), Shape: [None, None, 4096], (خروجی hidden state لایه N-2 - از بلاک قبلی)
+past_key_values.{N-1}.key: tensor(float16), Shape: [None, 8, None, 128], (کش key لایه N-1)
+past_key_values.{N-1}.value: tensor(float16), Shape: [None, 8, None, 128], (کش value لایه N-1)
+الگوی کلی خروجی‌های مدل (از گراف ONNX) برای block_N.onnx (N از ۲ تا ۳۲):
+/model/layers.{N-1}/Add_1_output_0: tensor(float16), Shape: [None, None, 4096], (خروجی hidden state لایه N-1)
+present.{N-1}.key: tensor(float16), Shape: [None, 8, None, 128], (کش جدید key لایه N-1)
+present.{N-1}.value: tensor(float16), Shape: [None, 8, None, 128], (کش جدید value لایه N-1)
+ورودی‌های ساختگی ایجاد شده برای block_N.onnx (مثال block_2.onnx):
+/model/ScatterND_output_0: Original Shape=[] -> Concrete Shape=[5, 1, 10, 10]
+/model/layers.0/Add_1_output_0: Original Shape=[None, None, 4096] -> Concrete Shape=[5, 10, 4096]
+/model/layers.0/self_attn/Unsqueeze_6_output_0: Original Shape=[] -> Concrete Shape=[5, 1, 10, 128]
+/model/layers.0/self_attn/Unsqueeze_7_output_0: Original Shape=[] -> Concrete Shape=[5, 1, 10, 128]
+past_key_values.1.key: Original Shape=[None, 8, None, 128] -> Concrete Shape=[5, 8, 0, 128]
+past_key_values.1.value: Original Shape=[None, 8, None, 128] -> Concrete Shape=[5, 8, 0, 128]
+خروجی‌های استنتاج واقعی برای block_N.onnx (مثال block_2.onnx):
+/model/layers.1/Add_1_output_0: Shape: (5, 10, 4096), Dtype: float16
+present.1.key: Shape: (5, 8, 10, 128), Dtype: float16
+present.1.value: Shape: (5, 8, 10, 128), Dtype: float16
+این الگو برای تمام بلاک‌های میانی (۲ تا ۳۲) تکرار می‌شود، با این تفاوت که شماره لایه در نام تنسورها (/model/layers.X/ و past_key_values.X.) با پیشرفت بلاک‌ها افزایش می‌یابد.
+پ. بلاک ۳۳: block_33.onnx (لایه نهایی و خروجی)
+این بلاک آخرین لایه ترنسفورمر (لایه ۳۲) را پیاده‌سازی می‌کند و خروجی نهایی مدل (logits) را تولید می‌کند.
+پارامترهای تست: batch_size=5, seq_len=10, past_seq=0
+ورودی‌های مدل (از گراف ONNX):
+/model/layers.31/Add_1_output_0: tensor(float16), Shape: [None, None, 4096], (خروجی hidden state لایه ۳۱)
+خروجی‌های مدل (از گراف ONNX):
+logits: tensor(float16), Shape: [None, None, 128256], (خروجی نهایی مدل)
+ورودی‌های ساختگی ایجاد شده:
+/model/layers.31/Add_1_output_0: Original Shape=[None, None, 4096] -> Concrete Shape=[5, 10, 4096]
+خروجی‌های استنتاج واقعی:
+logits: Shape: (5, 10, 128256), Dtype: float16
+۳. نتیجه‌گیری و تحلیل وابستگی‌ها برای پایپ‌لاین
+موفقیت کامل: تمام بلاک‌ها به صورت مستقل با موفقیت تست شده‌اند، که نشان‌دهنده سلامت فایل‌های ONNX و قابلیت آن‌ها برای اجرای استنتاج است.
+مدیریت شکل‌های دینامیک: تابع get_concrete_shape به درستی شکل‌های دینامیک (None یا -1) را به شکل‌های مشخص (Concrete Shapes) بر اساس batch_size, seq_len, و past_seq تبدیل کرده است. این برای اطمینان از اینکه ورودی‌های ساختگی با ابعاد صحیح به مدل داده می‌شوند، حیاتی است.
+وابستگی‌های بین بلاک‌ها:
+block_1.onnx: این بلاک ورودی‌های اولیه مدل (attention_mask, input_ids, position_ids) را می‌گیرد و خروجی‌های اولیه ترنسفورمر (شامل hidden state لایه ۰، الگوهای attention و کش‌های key/value اولیه) را تولید می‌کند.
+بلاک‌های میانی (block_2.onnx تا block_32.onnx):
+این بلاک‌ها به hidden state از بلاک قبلی (مثلاً /model/layers.X/Add_1_output_0) و همچنین الگوهای attention از block_1 (مانند /model/ScatterND_output_0, /model/layers.0/self_attn/Unsqueeze_X_output_0) و کش‌های past_key_values مربوط به لایه خودشان وابسته هستند.
+خروجی‌های اصلی آن‌ها نیز hidden state برای بلاک بعدی و کش‌های present.key/value به‌روز شده برای استفاده در گام زمانی بعدی است.
+block_33.onnx: این بلاک آخرین hidden state را از block_32 دریافت می‌کند و logits (خروجی نهایی مدل) را تولید می‌کند.
+نقش past_key_values و present.key/value: این تنسورها برای مدیریت حافظه در مدل‌های ترنسفورمر (کش کردن محاسبات attention از توکن‌های قبلی) ضروری هستند. در این تست، past_seq=0 بوده، بنابراین ورودی‌های past_key_values خالی هستند و خروجی‌های present.key/value شامل کش‌های جدید برای توکن‌های فعلی (با طول seq_len) هستند. در یک پایپ‌لاین استنتاج توالی‌گرا واقعی، present.key/value از یک گام زمانی به عنوان past_key_values برای گام زمانی بعدی استفاده می‌شود.
+این تحلیل جزئیات کافی را برای درک جریان داده‌ها و وابستگی‌های بین بلاک‌ها در مدل شما فراهم می‌کند و می‌تواند به شما در طراحی و پیاده‌سازی پایپ‌لاین استنتاج کمک کند.
+
+
+
+
+
+
+📄 homf_lib.py
+هدف: بارگذاری سریع و کش کردن مدل‌های ONNXکلاس اصلی: WarmStatePoolمتدهای کلیدی:__init__(): تنظیمات اولیه pool، تعیین execution providersget_session_ultra_fast(): دریافت سشن ONNX از cache یا بارگذاری جدیدexecute_session_with_homf_cache(): اجرای inference با مدیریت cache_load_session_with_mmap_weights(): بارگذاری با memory-mapped weights_evict_oldest_session(): حذف قدیمی‌ترین سشن (LRU)ویژگی خاص: استفاده از تکنیک‌های بارگذاری سریع (mmap, skeleton models)
+📄 worker_lib.py
+هدف: ایجاد کارگرهای مستقل برای اجرای مدل روی CPU یا GPUکلاس‌ها:BaseWorkerمتدهای اصلی:run(): حلقه اصلی - منتظر job از inbox، پردازش، ارسال نتیجه_process_job(): دریافت سشن از HOMF، اجرای inference، بازگشت نتایجshutdown(): خاتمه gracefulCPUWorker و GPUWorkerفقط execution_providers متفاوت دارندCPU: ['CPUExecutionProvider']GPU: ['DmlExecutionProvider', 'CPUExecutionProvider']ویژگی: استفاده از ThreadPoolExecutor برای جلوگیری از blocking
+📄 scheduler_lib.py
+هدف: تعیین بهترین نحوه تقسیم بلاک‌ها بین CPU و GPUکلاس: StaticSplitSchedulerمتدهای مهم:__init__(): بارگذاری performance profilegenerate_execution_plan(): محاسبه نقطه تقسیم بهینه (k)تست همه حالات: k=0 تا k=33محاسبه زمان: pipeline_time = max(cpu_time, gpu_time)انتخاب k با کمترین pipeline_timeget_worker_for_block(): مشخص کردن worker برای هر بلاکget_execution_summary(): آمار و خلاصه planخروجی: دیکشنری {"block_1": "CPU", "block_2": "CPU", ..., "block_20": "GPU"}
+📄 model_node.py
+هدف: سرور اصلی WebSocket و مدیریت pipelineتوابع کلیدی:handler()دریافت درخواست WebSocketفراخوانی execute_pipeline()ارسال پاسخ نهاییexecute_pipeline()مراحل:بررسی مقداردهی اولیهdeserialize ورودی‌هاحلقه روی همه بلاک‌ها:تعیین worker از EXECUTION_PLANآماده‌سازی inputs (hidden states, KV cache)ارسال job به workerانتظار برای نتیجهذخیره outputs برای بلاک بعدیبازگشت نتیجه نهاییmain_server()بارگذاری تنظیماتایجاد workers و schedulerراه‌اندازی WebSocket serverمتغیرهای global مهم:EXECUTION_PLAN: نقشه تقسیم بلاک‌هاCPU_WORKER, GPU_WORKER: نمونه‌های workerGLOBAL_HOMF_POOL: مدیریت cache مدل‌ها
+📄 serialization_utils.py
+هدف: تبدیل numpy arrays به/از JSONتوابع:tensor_to_json_serializable(tensor){
+    "_tensor_": True,
+    "dtype": "float32",
+    "shape": [1, 6, 4096],
+    "data_b64": "base64_encoded_bytes..."
+}json_serializable_to_tensor(data)بررسی وجود _tensor_ flagdecode کردن base64بازسازی numpy array با shape و dtype صحیحکاربرد: ارسال tensors در WebSocket (JSON نمی‌تواند مستقیماً numpy array را handle کند)
+sequential_gpu_worker_lib.py
+پیاده‌سازی SequentialGPUWorker (ورکر GPU ترتیبی)
+کلاس SequentialGPUWorker یک جزء حیاتی برای مدیریت استنتاج مدل‌های هوش مصنوعی (ONNX) روی سخت‌افزار GPU و CPU است. هدف اصلی آن اطمینان از پایداری و قابلیت اطمینان بالا در اجرای مدل‌هاست، حتی در مواجهه با خطاهای سخت‌افزاری یا کمبود منابع.
+ویژگی‌های کلیدی:
+مدیریت هوشمند منابع GPU: این ورکر مدل‌ها را فقط در صورت نیاز بارگذاری (Load) و پس از استفاده، تخلیه (Unload) می‌کند. این رویکرد "Load/Unload pattern" به بهینه‌سازی مصرف حافظه GPU کمک کرده و از اشغال بی‌مورد منابع جلوگیری می‌کند.
+سیستم فال‌بک (Fallback) قوی: در صورتی که بارگذاری یا اجرای مدل روی GPU با خطا مواجه شود (مثلاً به دلیل مشکلات درایور یا حافظه)، ورکر به طور خودکار تلاش می‌کند تا از سایر GPU Providers (مثل DML یا CUDA) و در نهایت از CPU برای اجرای مدل استفاده کند. این قابلیت، مقاومت در برابر خطا (Fault Tolerance) را به شدت افزایش می‌دهد.
+ثبت وقایع (Logging) جامع: تمام عملیات‌های کلیدی، از جمله بارگذاری مدل، اجرای استنتاج، خطاها و فال‌بک‌ها، با جزئیات کامل ثبت می‌شوند. این اطلاعات برای مانیتورینگ، عیب‌یابی و تجزیه و تحلیل عملکرد بسیار ارزشمند هستند.
+پاکسازی حافظه (Memory Cleanup): ورکر به طور دوره‌ای حافظه را پاکسازی می‌کند تا از انباشتگی داده‌های غیرضروری و مشکلات مربوط به حافظه جلوگیری شود، که برای کارهای طولانی‌مدت حیاتی است.
+آمار عملکردی: این کلاس آمارهای دقیقی از جمله تعداد job‌های موفق/ناموفق، زمان‌های بارگذاری و اجرا، و تعداد دفعات فال‌بک به CPU را نگهداری می‌کند که برای بررسی کارایی و بهینه‌سازی سیستم مفید است.
+

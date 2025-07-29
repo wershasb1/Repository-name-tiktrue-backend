@@ -1,0 +1,28 @@
+{
+  "platform": "django",
+  "app": "your-backend-app-name",
+  "django": {
+    "mirror": true,
+    "pythonVersion": "3.11",
+    "timezone": "Asia/Tehran",
+    "compileMessages": false,
+    "modifySettings": true,
+    "geospatial": false,
+    "collectStatic": true
+  },
+  "build": {
+    "buildCommand": "python manage.py collectstatic --noinput && python manage.py migrate --noinput"
+  },
+  "healthCheck": {
+    "path": "/health/",
+    "timeout": 30
+  },
+  "port": 8000,
+  "environments": {
+    "SECRET_KEY": "your-secret-key",
+    "DEBUG": "False",
+    "ALLOWED_HOSTS": "your-domain.com,your-app.liara.run",
+    "DATABASE_URL": "postgresql://user:pass@host:port/db",
+    "CORS_ALLOWED_ORIGINS": "https://your-frontend-domain.com"
+  }
+}

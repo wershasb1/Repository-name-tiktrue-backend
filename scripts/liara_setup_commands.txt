@@ -1,0 +1,21 @@
+# دستورات تنظیم لیارا
+
+## 1. متغیرهای محیطی (Environment Variables):
+SECRET_KEY = django-insecure-tiktrue-2024-change-this-in-production-xyz123
+DEBUG = False
+DATABASE_URL = postgresql://root:4C88YnkYbZwQCL5RYxxJR7Hy@tiktrue-db:5432/postgres
+
+## 2. دستورات کنسول لیارا:
+python manage.py migrate
+python manage.py setup_models
+python manage.py createsuperuser
+
+## 3. اطلاعات Admin Panel:
+Email: admin@tiktrue.com
+Username: admin
+Password: [انتخاب کنید]
+
+## 4. تست URL ها:
+https://tiktrue.com/admin/
+https://tiktrue.com/api/v1/auth/register/
+https://tiktrue.com/api/v1/models/available/

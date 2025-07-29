@@ -1,0 +1,43 @@
+{
+  "hosting": {
+    "provider": "liara",
+    "backend_app": "tiktrue-backend",
+    "frontend_app": "tiktrue-frontend",
+    "domain": "tiktrue.com",
+    "api_domain": "api.tiktrue.com"
+  },
+  "database": {
+    "type": "postgresql",
+    "backup_before_deploy": true,
+    "migration_timeout": 300
+  },
+  "deployment": {
+    "backup_enabled": true,
+    "rollback_enabled": true,
+    "health_check_timeout": 300,
+    "retry_attempts": 3,
+    "deployment_timeout": 900
+  },
+  "security": {
+    "ssl_verification": true,
+    "security_headers_check": true,
+    "cors_validation": true
+  },
+  "notifications": {
+    "enabled": false,
+    "webhook_url": null,
+    "email_notifications": false,
+    "slack_webhook": null
+  },
+  "monitoring": {
+    "health_check_endpoints": [
+      "/health/",
+      "/api/v1/auth/",
+      "/admin/"
+    ],
+    "performance_thresholds": {
+      "response_time_ms": 2000,
+      "error_rate_percent": 1
+    }
+  }
+}

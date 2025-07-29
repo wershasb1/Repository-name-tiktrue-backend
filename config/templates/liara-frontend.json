@@ -1,0 +1,44 @@
+{
+  "platform": "static",
+  "app": "your-frontend-app-name",
+  "build": {
+    "command": "CI=false npm run build",
+    "output": "build"
+  },
+  "static": {
+    "spa": true,
+    "gzip": true,
+    "cache": {
+      "static": "1y",
+      "html": "0",
+      "json": "1h",
+      "images": "1M"
+    },
+    "headers": {
+      "/*": {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-XSS-Protection": "1; mode=block",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://your-backend-domain.com; frame-ancestors 'none';"
+      }
+    },
+    "redirects": [
+      {
+        "source": "http://your-domain.com/*",
+        "destination": "https://your-domain.com/:splat",
+        "permanent": true
+      },
+      {
+        "source": "http://www.your-domain.com/*",
+        "destination": "https://your-domain.com/:splat",
+        "permanent": true
+      }
+    ]
+  },
+  "port": 80
+}

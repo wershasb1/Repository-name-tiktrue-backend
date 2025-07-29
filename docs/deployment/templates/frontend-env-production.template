@@ -1,0 +1,217 @@
+# TikTrue Frontend Production Environment Template
+# Copy this file to .env.production for production builds
+
+# =============================================================================
+# API CONFIGURATION (REQUIRED)
+# =============================================================================
+
+# Backend API base URL - must include /api/v1 suffix
+REACT_APP_API_BASE_URL=https://api.tiktrue.com/api/v1
+
+# Backend base URL - without /api/v1 suffix
+REACT_APP_BACKEND_URL=https://api.tiktrue.com
+
+# Frontend URL - your website domain
+REACT_APP_FRONTEND_URL=https://tiktrue.com
+
+# =============================================================================
+# BUILD CONFIGURATION
+# =============================================================================
+
+# Disable source maps in production for security and performance
+GENERATE_SOURCEMAP=false
+
+# Disable runtime chunk inlining for better caching
+INLINE_RUNTIME_CHUNK=false
+
+# Continuous Integration mode (set to false for normal builds)
+CI=false
+
+# =============================================================================
+# APPLICATION SETTINGS
+# =============================================================================
+
+# Environment identifier
+REACT_APP_ENVIRONMENT=production
+
+# Debug mode (false for production)
+REACT_APP_DEBUG=false
+
+# Application version
+REACT_APP_VERSION=1.0.0
+
+# Site name for branding
+REACT_APP_SITE_NAME=TikTrue
+
+# =============================================================================
+# FEATURE FLAGS
+# =============================================================================
+
+# Enable analytics tracking in production
+REACT_APP_ENABLE_ANALYTICS=true
+
+# Enable experimental features (usually false in production)
+REACT_APP_ENABLE_EXPERIMENTAL_FEATURES=false
+
+# Enable dark mode toggle
+REACT_APP_ENABLE_DARK_MODE=true
+
+# Enable user feedback system
+REACT_APP_ENABLE_FEEDBACK=true
+
+# Enable error reporting
+REACT_APP_ENABLE_ERROR_REPORTING=true
+
+# =============================================================================
+# API CONFIGURATION
+# =============================================================================
+
+# API timeout in milliseconds (10 seconds)
+REACT_APP_API_TIMEOUT=10000
+
+# API retry attempts
+REACT_APP_API_RETRY_ATTEMPTS=3
+
+# API rate limiting (requests per minute)
+REACT_APP_API_RATE_LIMIT=60
+
+# =============================================================================
+# UI CONFIGURATION
+# =============================================================================
+
+# Default theme (light/dark)
+REACT_APP_DEFAULT_THEME=light
+
+# Default language
+REACT_APP_DEFAULT_LANGUAGE=en
+
+# Items per page for pagination
+REACT_APP_ITEMS_PER_PAGE=20
+
+# Maximum file upload size (in MB)
+REACT_APP_MAX_FILE_SIZE=10
+
+# =============================================================================
+# SECURITY SETTINGS
+# =============================================================================
+
+# Content Security Policy mode (report/enforce)
+REACT_APP_CSP_MODE=enforce
+
+# Enable secure headers
+REACT_APP_ENABLE_SECURITY_HEADERS=true
+
+# Session timeout (in minutes)
+REACT_APP_SESSION_TIMEOUT=60
+
+# =============================================================================
+# THIRD-PARTY INTEGRATIONS
+# =============================================================================
+
+# Google Analytics tracking ID (if using GA)
+# REACT_APP_GA_TRACKING_ID=GA-XXXXXXXXX
+
+# Sentry DSN for error tracking
+# REACT_APP_SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# Hotjar tracking ID (if using Hotjar)
+# REACT_APP_HOTJAR_ID=your-hotjar-id
+
+# Intercom app ID (if using Intercom)
+# REACT_APP_INTERCOM_APP_ID=your-intercom-app-id
+
+# =============================================================================
+# PERFORMANCE SETTINGS
+# =============================================================================
+
+# Enable service worker for caching
+REACT_APP_ENABLE_SERVICE_WORKER=true
+
+# Enable code splitting
+REACT_APP_ENABLE_CODE_SPLITTING=true
+
+# Enable lazy loading
+REACT_APP_ENABLE_LAZY_LOADING=true
+
+# Bundle analyzer (set to true to analyze bundle size)
+REACT_APP_ANALYZE_BUNDLE=false
+
+# =============================================================================
+# DEVELOPMENT OVERRIDES (Remove in production)
+# =============================================================================
+
+# Uncomment for development only:
+# REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+# REACT_APP_BACKEND_URL=http://localhost:8000
+# REACT_APP_FRONTEND_URL=http://localhost:3000
+# GENERATE_SOURCEMAP=true
+# REACT_APP_DEBUG=true
+# REACT_APP_ENVIRONMENT=development
+# REACT_APP_ENABLE_ANALYTICS=false
+# FAST_REFRESH=true
+# ESLINT_NO_DEV_ERRORS=true
+
+# =============================================================================
+# STAGING OVERRIDES (For staging environment)
+# =============================================================================
+
+# Uncomment for staging only:
+# REACT_APP_API_BASE_URL=https://staging-api.tiktrue.com/api/v1
+# REACT_APP_BACKEND_URL=https://staging-api.tiktrue.com
+# REACT_APP_FRONTEND_URL=https://staging.tiktrue.com
+# REACT_APP_ENVIRONMENT=staging
+# REACT_APP_ENABLE_ANALYTICS=false
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC EXAMPLES
+# =============================================================================
+
+# For Local Development:
+# REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+# REACT_APP_BACKEND_URL=http://localhost:8000
+# REACT_APP_FRONTEND_URL=http://localhost:3000
+# GENERATE_SOURCEMAP=true
+# REACT_APP_DEBUG=true
+# REACT_APP_ENVIRONMENT=development
+
+# For Staging:
+# REACT_APP_API_BASE_URL=https://staging-api.tiktrue.com/api/v1
+# REACT_APP_BACKEND_URL=https://staging-api.tiktrue.com
+# REACT_APP_FRONTEND_URL=https://staging.tiktrue.com
+# REACT_APP_ENVIRONMENT=staging
+
+# For Production:
+# REACT_APP_API_BASE_URL=https://api.tiktrue.com/api/v1
+# REACT_APP_BACKEND_URL=https://api.tiktrue.com
+# REACT_APP_FRONTEND_URL=https://tiktrue.com
+# REACT_APP_ENVIRONMENT=production
+
+# =============================================================================
+# IMPORTANT NOTES
+# =============================================================================
+
+# 1. All custom environment variables must start with REACT_APP_
+# 2. Environment variables are embedded at build time, not runtime
+# 3. Never put sensitive data in React environment variables (they're public)
+# 4. Restart development server after changing environment variables
+# 5. Different .env files are loaded based on NODE_ENV and file priority:
+#    - .env.production.local (production, local overrides)
+#    - .env.local (always loaded except in test)
+#    - .env.production (production)
+#    - .env (default)
+
+# 6. To use this template:
+#    - Copy to .env.production in your frontend directory
+#    - Update API URLs to match your backend deployment
+#    - Configure feature flags as needed
+#    - Remove development/staging overrides
+#    - Test build: npm run build
+
+# 7. For Liara deployment, set these variables in liara.json:
+#    "environments": {
+#      "REACT_APP_API_BASE_URL": "https://api.tiktrue.com/api/v1",
+#      "REACT_APP_BACKEND_URL": "https://api.tiktrue.com",
+#      "REACT_APP_FRONTEND_URL": "https://tiktrue.com",
+#      "GENERATE_SOURCEMAP": "false",
+#      "REACT_APP_ENVIRONMENT": "production"
+#    }

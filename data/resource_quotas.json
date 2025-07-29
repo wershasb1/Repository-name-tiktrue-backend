@@ -1,0 +1,22 @@
+{
+  "networks": {
+    "current_count": 2,
+    "current_size_mb": 0,
+    "last_reset": "2025-07-20T14:47:27.347259"
+  },
+  "workers": {
+    "current_count": 5,
+    "current_size_mb": 0,
+    "last_reset": "2025-07-20T14:47:27.347259"
+  },
+  "models": {
+    "current_count": 0,
+    "current_size_mb": 0,
+    "last_reset": "2025-07-20T14:47:27.347259"
+  },
+  "api_calls": {
+    "current_count": 110,
+    "current_size_mb": 0,
+    "last_reset": "2025-07-20T14:47:27.347259"
+  }
+}

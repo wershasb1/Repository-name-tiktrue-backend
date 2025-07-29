@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
+import apiService from '../services/apiService';
 
 const AuthContext = createContext();
 
@@ -12,30 +12,18 @@ export const useAuth = () => {
   return context;
 };
 
-// Configure axios defaults
-axios.defaults.baseURL = process.env.REACT_APP_API_BASE_URL || 'https://api.tiktrue.com/api/v1';
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
-
-  // Set axios default authorization header
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-    }
-  }, [token]);
 
   // Check if user is authenticated on app load
   useEffect(() => {
     const checkAuth = async () => {
       if (token) {
         try {
-          const response = await axios.get('/auth/profile/');
-          setUser(response.data);
+          const userData = await apiService.auth.getProfile();
+          setUser(userData);
         } catch (error) {
           console.error('Auth check failed:', error);
           logout();
@@ -49,23 +37,21 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, hardwareFingerprint = 'web-browser') => {
     try {
-      const response = await axios.post('/auth/login/', {
+      const response = await apiService.auth.login({
         email,
         password,
         hardware_fingerprint: hardwareFingerprint
       });
 
-      const { user: userData, tokens } = response.data;
+      const { user: userData } = response;
       
       setUser(userData);
-      setToken(tokens.access);
-      localStorage.setItem('token', tokens.access);
-      localStorage.setItem('refreshToken', tokens.refresh);
+      setToken(apiService.getAuthToken());
       
       toast.success('Login successful!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Login failed';
+      const message = error.message || 'Login failed';
       toast.error(message);
       return { success: false, error: message };
     }
@@ -73,45 +59,47 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, username, password, passwordConfirm) => {
     try {
-      const response = await axios.post('/auth/register/', {
+      const response = await apiService.auth.register({
         email,
         username,
         password,
         password_confirm: passwordConfirm
       });
 
-      const { user: userData, tokens } = response.data;
+      const { user: userData } = response;
       
       setUser(userData);
-      setToken(tokens.access);
-      localStorage.setItem('token', tokens.access);
-      localStorage.setItem('refreshToken', tokens.refresh);
+      setToken(apiService.getAuthToken());
       
       toast.success('Registration successful!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Registration failed';
+      const message = error.message || 'Registration failed';
       toast.error(message);
       return { success: false, error: message };
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    delete axios.defaults.headers.common['Authorization'];
-    toast.success('Logged out successfully');
+  const logout = async () => {
+    try {
+      await apiService.auth.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setToken(null);
+      toast.success('Logged out successfully');
+    }
   };
 
   const forgotPassword = async (email) => {
     try {
-      await axios.post('/auth/forgot-password/', { email });
+      // Note: This endpoint may not be implemented yet
+      await apiService.client.post('/auth/forgot-password/', { email });
       toast.success('Password reset email sent!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Failed to send reset email';
+      const message = error.message || 'Failed to send reset email';
       toast.error(message);
       return { success: false, error: message };
     }
@@ -119,7 +107,8 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (token, password, passwordConfirm) => {
     try {
-      await axios.post('/auth/reset-password/', {
+      // Note: This endpoint may not be implemented yet
+      await apiService.client.post('/auth/reset-password/', {
         token,
         password,
         password_confirm: passwordConfirm
@@ -127,7 +116,7 @@ export const AuthProvider = ({ children }) => {
       toast.success('Password reset successful!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Password reset failed';
+      const message = error.message || 'Password reset failed';
       toast.error(message);
       return { success: false, error: message };
     }

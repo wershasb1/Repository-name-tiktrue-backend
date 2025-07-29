@@ -6,18 +6,18 @@
 const axios = require('axios');
 
 // Configure axios to use the backend API
-axios.defaults.baseURL = 'https://tiktrue-backend.liara.run/api/v1';
+axios.defaults.baseURL = 'https://api.tiktrue.com/api/v1';
 
 async function testCompleteFlow() {
     console.log('🚀 Testing Complete Application Flow...');
-    console.log('Frontend URL: https://tiktrue-frontend.liara.run');
+    console.log('Frontend URL: https://tiktrue.com');
     console.log('Backend URL:', axios.defaults.baseURL);
     console.log('='.repeat(60));
 
     // Test 1: Frontend Accessibility
     console.log('\n📱 Testing Frontend Deployment...');
     try {
-        const frontendResponse = await axios.get('https://tiktrue-frontend.liara.run');
+        const frontendResponse = await axios.get('https://tiktrue.com');
         console.log('✅ Frontend accessible:', frontendResponse.status);
         
         // Check if it's the React app
@@ -128,7 +128,7 @@ async function testCompleteFlow() {
     try {
         const corsResponse = await axios.options('/auth/login/', {
             headers: {
-                'Origin': 'https://tiktrue-frontend.liara.run',
+                'Origin': 'https://tiktrue.com',
                 'Access-Control-Request-Method': 'POST',
                 'Access-Control-Request-Headers': 'Content-Type, Authorization'
             }

@@ -1,0 +1,609 @@
+{
+  "metadata": {
+    "profiling_timestamp_utc": "2025-07-03T15:45:46",
+    "onnxruntime_version": "1.22.0",
+    "warmup_runs_per_session": 3,
+    "benchmark_runs_per_session": 10,
+    "providers_tested": [
+      "CPUExecutionProvider",
+      "DmlExecutionProvider"
+    ],
+    "debug_mode": false
+  },
+  "profiles": {
+    "block_1": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 273.4739,
+        "std_ms": 24.9491,
+        "min_ms": 241.802,
+        "max_ms": 324.1805,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 133.6757,
+        "std_ms": 5.1029,
+        "min_ms": 125.559,
+        "max_ms": 143.981,
+        "num_runs": 10
+      }
+    },
+    "block_2": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 245.2444,
+        "std_ms": 9.4274,
+        "min_ms": 233.0933,
+        "max_ms": 265.9827,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 121.271,
+        "std_ms": 0.9162,
+        "min_ms": 119.976,
+        "max_ms": 122.6787,
+        "num_runs": 10
+      }
+    },
+    "block_3": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 229.2338,
+        "std_ms": 13.2712,
+        "min_ms": 215.5691,
+        "max_ms": 254.7931,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 134.6399,
+        "std_ms": 5.0686,
+        "min_ms": 129.3165,
+        "max_ms": 142.1403,
+        "num_runs": 10
+      }
+    },
+    "block_4": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 216.3551,
+        "std_ms": 7.1869,
+        "min_ms": 202.0834,
+        "max_ms": 225.9915,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 110.5119,
+        "std_ms": 2.9563,
+        "min_ms": 106.2925,
+        "max_ms": 114.0966,
+        "num_runs": 10
+      }
+    },
+    "block_5": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 210.0725,
+        "std_ms": 5.3603,
+        "min_ms": 202.037,
+        "max_ms": 219.1526,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 113.7298,
+        "std_ms": 3.306,
+        "min_ms": 109.9445,
+        "max_ms": 119.7941,
+        "num_runs": 10
+      }
+    },
+    "block_6": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 207.4842,
+        "std_ms": 8.3625,
+        "min_ms": 198.4381,
+        "max_ms": 227.7965,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 115.5091,
+        "std_ms": 3.8998,
+        "min_ms": 108.5559,
+        "max_ms": 120.2316,
+        "num_runs": 10
+      }
+    },
+    "block_7": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 208.2308,
+        "std_ms": 8.8119,
+        "min_ms": 198.4642,
+        "max_ms": 229.0709,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 111.8093,
+        "std_ms": 2.448,
+        "min_ms": 106.8179,
+        "max_ms": 115.3485,
+        "num_runs": 10
+      }
+    },
+    "block_8": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 205.4389,
+        "std_ms": 5.5622,
+        "min_ms": 199.7103,
+        "max_ms": 216.9059,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 108.0819,
+        "std_ms": 1.4911,
+        "min_ms": 105.4674,
+        "max_ms": 110.8261,
+        "num_runs": 10
+      }
+    },
+    "block_9": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 205.2431,
+        "std_ms": 6.7701,
+        "min_ms": 198.9326,
+        "max_ms": 221.8285,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 107.3693,
+        "std_ms": 2.1425,
+        "min_ms": 105.3658,
+        "max_ms": 112.5054,
+        "num_runs": 10
+      }
+    },
+    "block_10": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 202.5249,
+        "std_ms": 4.077,
+        "min_ms": 197.8363,
+        "max_ms": 209.6251,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 105.1097,
+        "std_ms": 3.5274,
+        "min_ms": 100.5634,
+        "max_ms": 111.5991,
+        "num_runs": 10
+      }
+    },
+    "block_11": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 207.5844,
+        "std_ms": 7.5839,
+        "min_ms": 198.0611,
+        "max_ms": 219.9698,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 109.1653,
+        "std_ms": 2.3948,
+        "min_ms": 105.6405,
+        "max_ms": 112.7711,
+        "num_runs": 10
+      }
+    },
+    "block_12": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 207.2205,
+        "std_ms": 6.2013,
+        "min_ms": 198.7847,
+        "max_ms": 218.0536,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 172.7678,
+        "std_ms": 27.1674,
+        "min_ms": 140.0656,
+        "max_ms": 231.0482,
+        "num_runs": 10
+      }
+    },
+    "block_13": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 220.3319,
+        "std_ms": 11.4261,
+        "min_ms": 197.7337,
+        "max_ms": 238.6081,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 123.8794,
+        "std_ms": 9.4974,
+        "min_ms": 110.6832,
+        "max_ms": 141.7965,
+        "num_runs": 10
+      }
+    },
+    "block_14": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 257.9192,
+        "std_ms": 31.8953,
+        "min_ms": 224.0013,
+        "max_ms": 339.5999,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 119.6771,
+        "std_ms": 6.8664,
+        "min_ms": 112.7856,
+        "max_ms": 134.7044,
+        "num_runs": 10
+      }
+    },
+    "block_15": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 211.6561,
+        "std_ms": 7.8991,
+        "min_ms": 198.5615,
+        "max_ms": 223.3847,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 109.0579,
+        "std_ms": 8.7412,
+        "min_ms": 97.0974,
+        "max_ms": 126.6128,
+        "num_runs": 10
+      }
+    },
+    "block_16": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 235.9551,
+        "std_ms": 55.8767,
+        "min_ms": 199.3611,
+        "max_ms": 393.4748,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 131.6421,
+        "std_ms": 11.7689,
+        "min_ms": 120.1462,
+        "max_ms": 160.4239,
+        "num_runs": 10
+      }
+    },
+    "block_17": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 214.0069,
+        "std_ms": 11.195,
+        "min_ms": 197.017,
+        "max_ms": 234.9051,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 123.5298,
+        "std_ms": 6.0674,
+        "min_ms": 112.3047,
+        "max_ms": 135.4883,
+        "num_runs": 10
+      }
+    },
+    "block_18": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 321.1846,
+        "std_ms": 92.2227,
+        "min_ms": 205.0735,
+        "max_ms": 500.9892,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 132.4884,
+        "std_ms": 9.5447,
+        "min_ms": 119.9897,
+        "max_ms": 156.1907,
+        "num_runs": 10
+      }
+    },
+    "block_19": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 246.3547,
+        "std_ms": 26.264,
+        "min_ms": 218.8943,
+        "max_ms": 307.6512,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 147.2831,
+        "std_ms": 26.5319,
+        "min_ms": 121.5724,
+        "max_ms": 195.8232,
+        "num_runs": 10
+      }
+    },
+    "block_20": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 247.267,
+        "std_ms": 30.7189,
+        "min_ms": 201.7381,
+        "max_ms": 307.466,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 210.8564,
+        "std_ms": 44.6017,
+        "min_ms": 128.8481,
+        "max_ms": 255.8883,
+        "num_runs": 10
+      }
+    },
+    "block_21": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 449.2841,
+        "std_ms": 61.7574,
+        "min_ms": 354.0375,
+        "max_ms": 541.6825,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 273.098,
+        "std_ms": 40.0423,
+        "min_ms": 239.2019,
+        "max_ms": 358.4608,
+        "num_runs": 10
+      }
+    },
+    "block_22": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 390.4949,
+        "std_ms": 16.9937,
+        "min_ms": 364.7207,
+        "max_ms": 418.4662,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 238.0937,
+        "std_ms": 20.6667,
+        "min_ms": 205.1549,
+        "max_ms": 263.5142,
+        "num_runs": 10
+      }
+    },
+    "block_23": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 396.5678,
+        "std_ms": 19.1907,
+        "min_ms": 366.6968,
+        "max_ms": 420.2235,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 239.1978,
+        "std_ms": 14.0175,
+        "min_ms": 215.9204,
+        "max_ms": 264.9286,
+        "num_runs": 10
+      }
+    },
+    "block_24": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 403.5532,
+        "std_ms": 26.8111,
+        "min_ms": 344.3133,
+        "max_ms": 452.3234,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 256.4379,
+        "std_ms": 15.2478,
+        "min_ms": 229.9859,
+        "max_ms": 283.475,
+        "num_runs": 10
+      }
+    },
+    "block_25": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 412.5028,
+        "std_ms": 31.1822,
+        "min_ms": 374.8632,
+        "max_ms": 485.4286,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 241.8371,
+        "std_ms": 22.4758,
+        "min_ms": 213.5827,
+        "max_ms": 293.0536,
+        "num_runs": 10
+      }
+    },
+    "block_26": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 434.8075,
+        "std_ms": 40.2258,
+        "min_ms": 364.8257,
+        "max_ms": 505.7145,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 252.0456,
+        "std_ms": 15.9498,
+        "min_ms": 230.6039,
+        "max_ms": 287.2282,
+        "num_runs": 10
+      }
+    },
+    "block_27": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 371.1178,
+        "std_ms": 81.7002,
+        "min_ms": 236.7046,
+        "max_ms": 514.3278,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 171.0015,
+        "std_ms": 21.2988,
+        "min_ms": 148.8425,
+        "max_ms": 210.9476,
+        "num_runs": 10
+      }
+    },
+    "block_28": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 217.1619,
+        "std_ms": 11.7136,
+        "min_ms": 200.8396,
+        "max_ms": 235.615,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 173.3062,
+        "std_ms": 12.7264,
+        "min_ms": 153.6703,
+        "max_ms": 188.0994,
+        "num_runs": 10
+      }
+    },
+    "block_29": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 215.2135,
+        "std_ms": 10.7756,
+        "min_ms": 199.5163,
+        "max_ms": 231.9578,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 131.5412,
+        "std_ms": 2.9941,
+        "min_ms": 128.4841,
+        "max_ms": 139.5772,
+        "num_runs": 10
+      }
+    },
+    "block_30": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 209.5312,
+        "std_ms": 7.0655,
+        "min_ms": 200.1633,
+        "max_ms": 223.1231,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 165.8454,
+        "std_ms": 35.0206,
+        "min_ms": 140.3773,
+        "max_ms": 268.4005,
+        "num_runs": 10
+      }
+    },
+    "block_31": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 297.2226,
+        "std_ms": 44.04,
+        "min_ms": 260.6931,
+        "max_ms": 424.8269,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 203.0321,
+        "std_ms": 13.6934,
+        "min_ms": 172.8568,
+        "max_ms": 221.9703,
+        "num_runs": 10
+      }
+    },
+    "block_32": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 291.6516,
+        "std_ms": 7.563,
+        "min_ms": 275.2294,
+        "max_ms": 300.923,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 185.1622,
+        "std_ms": 21.6582,
+        "min_ms": 149.4117,
+        "max_ms": 216.8658,
+        "num_runs": 10
+      }
+    },
+    "block_33": {
+      "CPU": {
+        "status": "success",
+        "mean_ms": 4033.2882,
+        "std_ms": 5189.1345,
+        "min_ms": 491.2173,
+        "max_ms": 14782.3861,
+        "num_runs": 10
+      },
+      "Dml": {
+        "status": "success",
+        "mean_ms": 331.3373,
+        "std_ms": 53.3436,
+        "min_ms": 204.8803,
+        "max_ms": 374.8928,
+        "num_runs": 10
+      }
+    }
+  }
+}

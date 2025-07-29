@@ -1,10 +1,28 @@
 {
+  "platform": "django",
+  "app": "tiktrue-backend",
   "django": {
     "mirror": true,
-    "pythonVersion": "3.10",
+    "pythonVersion": "3.11",
     "timezone": "Asia/Tehran",
     "compileMessages": false,
     "modifySettings": true,
-    "geospatial": false
+    "geospatial": false,
+    "collectStatic": true
+  },
+  "build": {
+    "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput"
+  },
+  "healthCheck": {
+    "path": "/health/",
+    "timeout": 30
+  },
+  "port": 8000,
+  "environments": {
+    "SECRET_KEY": "REQUIRED",
+    "DEBUG": "False",
+    "DATABASE_URL": "REQUIRED",
+    "CORS_ALLOWED_ORIGINS": "https://tiktrue.com,https://www.tiktrue.com",
+    "ALLOWED_HOSTS": "api.tiktrue.com,tiktrue-backend.liara.run"
   }
 }

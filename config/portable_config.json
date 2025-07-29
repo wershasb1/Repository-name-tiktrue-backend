@@ -1,0 +1,32 @@
+{
+  "deployment_mode": "portable",
+  "paths": {
+    "models_dir": "assets/models",
+    "logs_dir": "logs",
+    "sessions_dir": "sessions",
+    "data_dir": "data",
+    "config_dir": ".",
+    "temp_dir": "temp"
+  },
+  "network": {
+    "network_id": "portable_network_001",
+    "network_name": "TikTrue Portable Network",
+    "admin_node_id": "portable_admin",
+    "max_clients": 3,
+    "allowed_models": [
+      "llama3_1_8b_fp16"
+    ],
+    "encryption_enabled": true,
+    "discovery_port": 8765,
+    "communication_port": 8766
+  },
+  "security": {
+    "encryption_key_rotation_days": 30,
+    "max_login_attempts": 3,
+    "session_timeout_minutes": 60,
+    "hardware_fingerprint_enabled": true,
+    "audit_logging_enabled": true
+  },
+  "version": "1.0.0-portable",
+  "created_at": "2024-01-01T00:00:00"
+}

@@ -1,0 +1,60 @@
+{
+  "project_name": "TikTrue",
+  "project_description": "TikTrue Distributed LLM Platform - Production Build",
+  "obfuscation_settings": {
+    "mode": "super",
+    "advanced": true,
+    "restrict_mode": 2,
+    "enable_bcc": true,
+    "enable_jit": true,
+    "enable_rft": true,
+    "enable_themida": false,
+    "mix_str": true,
+    "assert_call": true,
+    "assert_import": true
+  },
+  "protection_settings": {
+    "anti_debug": true,
+    "anti_dump": true,
+    "anti_vm": false,
+    "check_interp": true,
+    "check_multiprocessing": true
+  },
+  "runtime_settings": {
+    "period": 3600,
+    "expired": "2025-12-31",
+    "devices": 1,
+    "bind_disk": true,
+    "bind_ipv4": false,
+    "bind_mac": true,
+    "bind_domain": false
+  },
+  "exclude_patterns": [
+    "test_*.py",
+    "*_test.py",
+    "tests/*",
+    "demo_*.py",
+    "__pycache__/*",
+    "*.pyc",
+    "*.pyo"
+  ],
+  "include_patterns": [
+    "*.py"
+  ],
+  "protected_modules": [
+    "main_app.py",
+    "windows_service.py",
+    "core/*.py",
+    "interfaces/*.py", 
+    "models/*.py",
+    "network/*.py",
+    "security/*.py",
+    "workers/*.py"
+  ],
+  "build_info": {
+    "version": "1.0.0",
+    "created_date": "2024-01-01",
+    "author": "TikTrue Technologies",
+    "contact": "support@tiktrue.com"
+  }
+}

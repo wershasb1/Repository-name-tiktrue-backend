@@ -1,0 +1,27 @@
+{
+  "network_id": "llama_local_network",
+  "model_id": "llama3_1_8b_fp16",
+  "model_chain_order": [
+    "block_1", "block_2", "block_3", "block_4", "block_5", "block_6", "block_7", "block_8",
+    "block_9", "block_10", "block_11", "block_12", "block_13", "block_14", "block_15", "block_16",
+    "block_17", "block_18", "block_19", "block_20", "block_21", "block_22", "block_23", "block_24",
+    "block_25", "block_26", "block_27", "block_28", "block_29", "block_30", "block_31", "block_32", "block_33"
+  ],
+  "nodes": {
+    "physical_node_1": {
+      "host": "localhost",
+      "port": 8701,
+      "assigned_block_ids_ordered_list": [
+        "block_1", "block_2", "block_3", "block_4", "block_5", "block_6", "block_7", "block_8",
+        "block_9", "block_10", "block_11", "block_12", "block_13", "block_14", "block_15", "block_16",
+        "block_17", "block_18", "block_19", "block_20", "block_21", "block_22", "block_23", "block_24",
+        "block_25", "block_26", "block_27", "block_28", "block_29", "block_30", "block_31", "block_32", "block_33"
+      ]
+    }
+  },
+  "paths": {
+    "onnx_blocks_dir": "assets/models/llama3_1_8b_fp16/blocks",
+    "metadata_file": "assets/models/llama3_1_8b_fp16/metadata.json",
+    "tokenizer_path": "assets/models/llama3_1_8b_fp16/blocks/tokenizer"
+  }
+}

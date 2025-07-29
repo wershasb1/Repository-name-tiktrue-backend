@@ -1,12 +1,14 @@
 {
-  "platform": "static",
+  "platform": "react",
   "app": "tiktrue-frontend",
-  "build": {
-    "command": "npm run build",
-    "output": "build"
-  },
-  "static": {
-    "spa": true
-  },
-  "port": 80
+  "port": 3000,
+  "nodeVersion": "22",
+ 
+  "environments": {
+    "REACT_APP_API_BASE_URL": "https://api.tiktrue.com/api/v1",
+    "REACT_APP_BACKEND_URL": "https://api.tiktrue.com",
+    "REACT_APP_FRONTEND_URL": "https://tiktrue.com",
+    "GENERATE_SOURCEMAP": "false",
+    "REACT_APP_ENVIRONMENT": "production"
+  }
 }

@@ -1,0 +1,58 @@
+TikTrue Distributed LLM Platform
+Software License Agreement
+
+Copyright (c) 2024 TikTrue Technologies. All rights reserved.
+
+IMPORTANT - READ CAREFULLY: This Software License Agreement ("Agreement") is a legal agreement between you (either an individual or a single entity) and TikTrue Technologies for the TikTrue Distributed LLM Platform software product, which includes computer software and may include associated media, printed materials, and "online" or electronic documentation ("Software").
+
+BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THE TERMS OF THIS AGREEMENT, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. GRANT OF LICENSE
+Subject to the terms and conditions of this Agreement, TikTrue Technologies grants you a non-exclusive, non-transferable license to use the Software in accordance with the terms of your purchased subscription plan.
+
+2. RESTRICTIONS
+You may not:
+- Reverse engineer, decompile, or disassemble the Software
+- Distribute, rent, lease, or sublicense the Software
+- Remove or alter any proprietary notices or labels on the Software
+- Use the Software in violation of applicable laws or regulations
+- Exceed the usage limits specified in your subscription plan
+
+3. SUBSCRIPTION TERMS
+- The Software requires an active subscription for full functionality
+- License validation is performed through hardware fingerprinting
+- Models and features available depend on your subscription tier
+- Subscription terms and pricing are subject to change with notice
+
+4. PRIVACY AND DATA COLLECTION
+- The Software may collect system information for license validation
+- Model usage data may be collected for service improvement
+- Personal data is handled according to our Privacy Policy
+- Local network communication is encrypted for security
+
+5. INTELLECTUAL PROPERTY
+- The Software and all intellectual property rights remain with TikTrue Technologies
+- You retain ownership of your data and content created using the Software
+- Third-party components are subject to their respective licenses
+
+6. WARRANTY DISCLAIMER
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. TIKTRUE TECHNOLOGIES DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+7. LIMITATION OF LIABILITY
+IN NO EVENT SHALL TIKTRUE TECHNOLOGIES BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+8. TERMINATION
+This Agreement is effective until terminated. Your rights under this Agreement will terminate automatically without notice if you fail to comply with any term of this Agreement. Upon termination, you must destroy all copies of the Software.
+
+9. GOVERNING LAW
+This Agreement shall be governed by and construed in accordance with the laws of the jurisdiction where TikTrue Technologies is incorporated.
+
+10. ENTIRE AGREEMENT
+This Agreement constitutes the entire agreement between you and TikTrue Technologies regarding the Software and supersedes all prior agreements and understandings.
+
+For technical support and license inquiries, please contact:
+TikTrue Technologies
+Email: support@tiktrue.com
+Website: https://tiktrue.com
+
+Last updated: December 2024

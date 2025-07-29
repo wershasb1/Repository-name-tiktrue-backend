@@ -1,0 +1,5 @@
+cd backend
+git branch -M main
+git remote add origin https://github.com/wershasb1/Repository-name-tiktrue-backend.git
+git push -u origin main
+

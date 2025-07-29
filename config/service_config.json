@@ -1,0 +1,43 @@
+{
+  "service_name": "TikTrueLLMService",
+  "display_name": "TikTrue Distributed LLM Platform Service",
+  "description": "Distributed Large Language Model inference platform with license management - runs core platform without models",
+  "auto_start": true,
+  "restart_on_failure": true,
+  "restart_delay_seconds": 30,
+  "max_restart_attempts": 5,
+  "failure_actions": [
+    {"action": "restart", "delay_ms": 30000},
+    {"action": "restart", "delay_ms": 60000},
+    {"action": "restart", "delay_ms": 120000},
+    {"action": "none", "delay_ms": 0}
+  ],
+  "main_script": "core/service_runner.py",
+  "python_executable": "python",
+  "working_directory": ".",
+  "environment_variables": {
+    "PYTHONPATH": ".",
+    "TIKTRUE_SERVICE_MODE": "1"
+  },
+  "log_level": "INFO",
+  "log_rotation": true,
+  "max_log_size_mb": 10,
+  "max_log_files": 5,
+  "dependencies": [
+    "Tcpip",
+    "Dnscache"
+  ],
+  "privileges": {
+    "run_as_system": true,
+    "interact_with_desktop": false
+  },
+  "service_mode": "discovery",
+  "websocket_host": "0.0.0.0",
+  "websocket_port": 8765,
+  "enable_discovery": true,
+  "enable_monitoring": true,
+  "auto_detect_mode": true,
+  "license_check_interval": 3600,
+  "network_scan_interval": 300,
+  "health_check_interval": 60
+}
