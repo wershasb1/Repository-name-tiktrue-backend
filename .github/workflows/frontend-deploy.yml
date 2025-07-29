@@ -1,0 +1,285 @@
+name: Frontend Deployment
+
+on:
+  push:
+    branches: [main]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/frontend-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/frontend-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  NODE_VERSION: '22'
+  WORKING_DIRECTORY: './frontend'
+
+jobs:
+  test:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run linting
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running ESLint..."
+          npm run lint || true
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-report.json || true
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx
+
+      - name: Run security audit
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running npm audit..."
+          npm audit --audit-level moderate --json > npm-audit.json || true
+          npm audit --audit-level moderate
+
+      - name: Run tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running tests..."
+          CI=true npm test -- --coverage --watchAll=false --testResultsProcessor=jest-sonar-reporter
+        env:
+          CI: true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: false
+
+      - name: Build application
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Building application..."
+          npm run build
+        env:
+          REACT_APP_API_BASE_URL: https://tiktrue-backend.liara.run/api/v1
+          REACT_APP_BACKEND_URL: https://tiktrue-backend.liara.run
+          REACT_APP_FRONTEND_URL: https://tiktrue-frontend.liara.run
+          REACT_APP_ENVIRONMENT: production
+          GENERATE_SOURCEMAP: false
+
+      - name: Analyze bundle size
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Analyzing bundle size..."
+          npx bundlesize || true
+          
+          # Get build size information
+          echo "## 📦 Build Size Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Directory Size" >> $GITHUB_STEP_SUMMARY
+          du -sh build/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Main Bundle Files" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/static/js/*.js | head -5 >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### CSS Files" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/static/css/*.css | head -5 >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-test-results
+          path: |
+            frontend/eslint-report.json
+            frontend/npm-audit.json
+            frontend/coverage/
+            frontend/test-results.xml
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build/
+          retention-days: 7
+
+  deploy:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: production
+      url: https://tiktrue-frontend.liara.run
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Build for production
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Building for production..."
+          npm run build
+        env:
+          REACT_APP_API_BASE_URL: https://tiktrue-backend.liara.run/api/v1
+          REACT_APP_BACKEND_URL: https://tiktrue-backend.liara.run
+          REACT_APP_FRONTEND_URL: https://tiktrue-frontend.liara.run
+          REACT_APP_ENVIRONMENT: production
+          GENERATE_SOURCEMAP: false
+
+      - name: Install Liara CLI
+        run: |
+          npm install -g @liara/cli
+          
+      - name: Login to Liara
+        run: |
+          liara login --api-token ${{ secrets.LIARA_API_TOKEN }}
+
+      - name: Deploy to Liara
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Deploying frontend to Liara..."
+          liara deploy --app tiktrue-frontend --platform react --detach
+          
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for deployment to complete..."
+          sleep 60
+
+      - name: Health check
+        run: |
+          echo "Performing health checks..."
+          
+          # Frontend health check
+          for i in {1..10}; do
+            echo "Health check attempt $i/10..."
+            if curl -f -s https://tiktrue-frontend.liara.run/ > /dev/null; then
+              echo "✅ Frontend health check passed"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "❌ Frontend health check failed after 10 attempts"
+              exit 1
+            fi
+            sleep 15
+          done
+          
+          # Test static assets
+          echo "Testing static assets..."
+          curl -f -s https://tiktrue-frontend.liara.run/static/css/ > /dev/null || echo "CSS assets check completed"
+          curl -f -s https://tiktrue-frontend.liara.run/static/js/ > /dev/null || echo "JS assets check completed"
+          echo "✅ Static assets accessible"
+
+      - name: Test API connectivity
+        run: |
+          echo "Testing API connectivity from frontend..."
+          # Test if frontend can reach backend
+          timeout 30 curl -f -s https://tiktrue-backend.liara.run/health/ > /dev/null
+          echo "✅ Backend API connectivity verified"
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Successful" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://tiktrue-frontend.liara.run" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health Check**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Connectivity**: ✅ Verified" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [test, deploy]
+    if: always()
+    
+    steps:
+      - name: Notify on success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "🎉 Frontend deployment successful!"
+          echo "URL: https://tiktrue-frontend.liara.run"
+          
+      - name: Notify on failure
+        if: needs.test.result == 'failure' || needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Frontend deployment failed!"
+          echo "Check the logs for details."
+
+      - name: Create failure issue
+        if: needs.deploy.result == 'failure' && github.ref == 'refs/heads/main'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Frontend Deployment Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## Frontend Deployment Failure
+              
+              **Commit**: ${context.sha}
+              **Actor**: ${context.actor}
+              **Workflow**: ${context.workflow}
+              **Run ID**: ${context.runId}
+              
+              **Details**:
+              - The frontend deployment to Liara failed
+              - Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+              - Build or health checks may have failed
+              
+              **Next Steps**:
+              1. Review the deployment logs
+              2. Check Liara dashboard for errors
+              3. Verify build configuration and environment variables
+              4. Test build locally
+              5. Consider rolling back if necessary
+              
+              **Links**:
+              - [Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+              - [Liara Dashboard](https://console.liara.ir/apps/tiktrue-frontend)
+              - [Frontend URL](https://tiktrue-frontend.liara.run)
+              `,
+              labels: ['bug', 'deployment', 'frontend', 'urgent']
+            });

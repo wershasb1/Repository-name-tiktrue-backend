@@ -1,0 +1,342 @@
+name: Backend Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths: 
+      - 'backend/**'
+      - '.github/workflows/test-backend.yml'
+  push:
+    branches: [develop]
+    paths: 
+      - 'backend/**'
+      - '.github/workflows/test-backend.yml'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  WORKING_DIRECTORY: './backend'
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort mypy
+
+      - name: Run Black formatter check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking code formatting with Black..."
+          black --check --diff .
+
+      - name: Run isort import sorting check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking import sorting with isort..."
+          isort --check-only --diff .
+
+      - name: Run flake8 linting
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running flake8 linting..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run type checking with mypy
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running type checking with mypy..."
+          mypy . --ignore-missing-imports || true
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety semgrep
+
+      - name: Run Bandit security scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running Bandit security scan..."
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . --severity-level medium
+
+      - name: Run Safety dependency check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking dependencies for known vulnerabilities..."
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Run Semgrep SAST scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running Semgrep SAST scan..."
+          semgrep --config=auto --json --output=semgrep-report.json . || true
+          semgrep --config=auto .
+
+      - name: Upload security scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-security-reports
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+            backend/semgrep-report.json
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.11']
+        django-version: ['4.2.7']
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_tiktrue
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-django pytest-xdist factory-boy
+
+      - name: Setup test environment
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Setting up test environment..."
+          export SECRET_KEY="test-secret-key-for-ci-$(date +%s)"
+          export DEBUG="True"
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_tiktrue"
+          python manage.py migrate --noinput
+
+      - name: Run unit tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running unit tests..."
+          export SECRET_KEY="test-secret-key-for-ci-$(date +%s)"
+          export DEBUG="True"
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_tiktrue"
+          pytest tests/unit/ -v --tb=short --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
+
+      - name: Run integration tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running integration tests..."
+          export SECRET_KEY="test-secret-key-for-ci-$(date +%s)"
+          export DEBUG="True"
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_tiktrue"
+          pytest tests/integration/ -v --tb=short
+
+      - name: Run API tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running API tests..."
+          export SECRET_KEY="test-secret-key-for-ci-$(date +%s)"
+          export DEBUG="True"
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_tiktrue"
+          pytest test_*.py -v --tb=short -k "api"
+
+      - name: Generate test report
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        if: always()
+        run: |
+          echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          coverage report >> $GITHUB_STEP_SUMMARY || echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-test-results-${{ matrix.python-version }}
+          path: |
+            backend/htmlcov/
+            backend/coverage.xml
+            backend/.coverage
+
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust pytest-benchmark
+
+      - name: Run performance benchmarks
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running performance benchmarks..."
+          export SECRET_KEY="test-secret-key-for-ci-$(date +%s)"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///benchmark.db"
+          python manage.py migrate --noinput
+          pytest -v --benchmark-only --benchmark-json=benchmark-results.json || true
+
+      - name: Upload performance results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-performance-results
+          path: |
+            backend/benchmark-results.json
+
+  build-check:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check Django configuration
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking Django configuration..."
+          export SECRET_KEY="test-secret-key-for-build-check"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///build_check.db"
+          python manage.py check --deploy
+
+      - name: Test database migrations
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Testing database migrations..."
+          export SECRET_KEY="test-secret-key-for-build-check"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///migration_test.db"
+          python manage.py migrate --noinput
+
+      - name: Collect static files
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Testing static file collection..."
+          export SECRET_KEY="test-secret-key-for-build-check"
+          export DEBUG="False"
+          export DATABASE_URL="sqlite:///static_test.db"
+          python manage.py collectstatic --noinput
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint, security, test, performance, build-check]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 📊 Backend Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality & Linting | ${{ needs.lint.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scanning | ${{ needs.security.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit & Integration Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Tests | ${{ needs.performance.result == 'success' && '✅ Passed' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Verification | ${{ needs.build-check.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.lint.result }}" == "success" && "${{ needs.security.result }}" == "success" && "${{ needs.test.result }}" == "success" && "${{ needs.build-check.result }}" == "success" ]]; then
+            echo "### 🎉 All critical tests passed! Ready for deployment." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Some tests failed. Please review before merging." >> $GITHUB_STEP_SUMMARY
+          fi

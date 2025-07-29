@@ -1,0 +1,409 @@
+name: Frontend Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/test-frontend.yml'
+  push:
+    branches: [develop]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/test-frontend.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+  WORKING_DIRECTORY: './frontend'
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run ESLint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running ESLint..."
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-report.json || true
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx --max-warnings 0
+
+      - name: Run Prettier check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking code formatting with Prettier..."
+          npx prettier --check src/
+
+      - name: Check TypeScript types
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Checking TypeScript types..."
+          npx tsc --noEmit || true
+
+      - name: Upload lint results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-lint-results
+          path: |
+            frontend/eslint-report.json
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run npm audit
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running npm audit..."
+          npm audit --audit-level moderate --json > npm-audit.json || true
+          npm audit --audit-level moderate
+
+      - name: Run Snyk security scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running Snyk security scan..."
+          npx snyk test --json > snyk-report.json || true
+          npx snyk test || true
+
+      - name: Check for sensitive files
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking for sensitive files..."
+          # Check for common sensitive patterns
+          if grep -r "password\|secret\|key\|token" src/ --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" | grep -v "placeholder\|example\|test"; then
+            echo "⚠️ Potential sensitive data found in source code"
+            exit 1
+          fi
+          echo "✅ No sensitive data patterns found"
+
+      - name: Upload security scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-security-reports
+          path: |
+            frontend/npm-audit.json
+            frontend/snyk-report.json
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: ['20', '22']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run unit tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running unit tests..."
+          CI=true npm test -- --coverage --watchAll=false --testResultsProcessor=jest-sonar-reporter --coverageReporters=text-lcov --coverageReporters=html --coverageReporters=json
+        env:
+          CI: true
+
+      - name: Run component tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running component tests..."
+          CI=true npm test -- --testPathPattern="components" --watchAll=false
+        env:
+          CI: true
+
+      - name: Run integration tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running integration tests..."
+          CI=true npm test -- --testPathPattern="integration" --watchAll=false
+        env:
+          CI: true
+
+      - name: Generate test report
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        if: always()
+        run: |
+          echo "## 🧪 Frontend Test Results (Node ${{ matrix.node-version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage/lcov-report/index.html ]; then
+            echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            echo "Coverage report generated successfully" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage-node-${{ matrix.node-version }}
+          fail_ci_if_error: false
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-test-results-node-${{ matrix.node-version }}
+          path: |
+            frontend/coverage/
+            frontend/test-results.xml
+
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        environment: [development, production]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Build for ${{ matrix.environment }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Building for ${{ matrix.environment }}..."
+          npm run build
+        env:
+          REACT_APP_API_BASE_URL: ${{ matrix.environment == 'production' && 'https://tiktrue-backend.liara.run/api/v1' || 'http://localhost:8000/api/v1' }}
+          REACT_APP_BACKEND_URL: ${{ matrix.environment == 'production' && 'https://tiktrue-backend.liara.run' || 'http://localhost:8000' }}
+          REACT_APP_FRONTEND_URL: ${{ matrix.environment == 'production' && 'https://tiktrue-frontend.liara.run' || 'http://localhost:3000' }}
+          REACT_APP_ENVIRONMENT: ${{ matrix.environment }}
+          GENERATE_SOURCEMAP: ${{ matrix.environment == 'development' && 'true' || 'false' }}
+
+      - name: Analyze bundle size
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Analyzing bundle size for ${{ matrix.environment }}..."
+          
+          # Get build size information
+          echo "## 📦 Build Analysis (${{ matrix.environment }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Directory Size" >> $GITHUB_STEP_SUMMARY
+          du -sh build/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Main Bundle Files" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/static/js/*.js | head -5 >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### CSS Files" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/static/css/*.css | head -5 >> $GITHUB_STEP_SUMMARY
+          
+          # Check bundle size limits
+          MAIN_JS_SIZE=$(ls -la build/static/js/main.*.js | awk '{print $5}')
+          if [ $MAIN_JS_SIZE -gt 2097152 ]; then  # 2MB limit
+            echo "⚠️ Main bundle size ($MAIN_JS_SIZE bytes) exceeds 2MB limit"
+          else
+            echo "✅ Main bundle size is within limits"
+          fi
+
+      - name: Test build artifacts
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Testing build artifacts..."
+          
+          # Check if essential files exist
+          test -f build/index.html || (echo "❌ index.html not found" && exit 1)
+          test -d build/static/js || (echo "❌ JavaScript files not found" && exit 1)
+          test -d build/static/css || (echo "❌ CSS files not found" && exit 1)
+          
+          echo "✅ All essential build artifacts present"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build-${{ matrix.environment }}
+          path: frontend/build/
+          retention-days: 7
+
+  e2e:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Install Playwright
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npx playwright install --with-deps
+
+      - name: Build application
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run build
+        env:
+          REACT_APP_API_BASE_URL: http://localhost:8000/api/v1
+          REACT_APP_BACKEND_URL: http://localhost:8000
+          REACT_APP_FRONTEND_URL: http://localhost:3000
+          REACT_APP_ENVIRONMENT: test
+
+      - name: Start application
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npx serve -s build -l 3000 &
+          sleep 5
+
+      - name: Run E2E tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running E2E tests..."
+          npx playwright test || true
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-e2e-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+
+  accessibility:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Build application
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run build
+        env:
+          REACT_APP_API_BASE_URL: http://localhost:8000/api/v1
+          REACT_APP_BACKEND_URL: http://localhost:8000
+          REACT_APP_FRONTEND_URL: http://localhost:3000
+          REACT_APP_ENVIRONMENT: test
+
+      - name: Run accessibility tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        continue-on-error: true
+        run: |
+          echo "Running accessibility tests..."
+          npx serve -s build -l 3000 &
+          sleep 5
+          npx axe-cli http://localhost:3000 --save axe-results.json || true
+
+      - name: Upload accessibility results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-accessibility-results
+          path: |
+            frontend/axe-results.json
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint, security, test, build, e2e, accessibility]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 📊 Frontend Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality & Linting | ${{ needs.lint.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scanning | ${{ needs.security.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit & Integration Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Verification | ${{ needs.build.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| End-to-End Tests | ${{ needs.e2e.result == 'success' && '✅ Passed' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Accessibility Tests | ${{ needs.accessibility.result == 'success' && '✅ Passed' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.lint.result }}" == "success" && "${{ needs.security.result }}" == "success" && "${{ needs.test.result }}" == "success" && "${{ needs.build.result }}" == "success" ]]; then
+            echo "### 🎉 All critical tests passed! Ready for deployment." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Some tests failed. Please review before merging." >> $GITHUB_STEP_SUMMARY
+          fi

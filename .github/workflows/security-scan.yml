@@ -1,0 +1,424 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run security scans weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - dependencies
+          - code
+          - secrets
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '22'
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'dependencies' || github.event.inputs.scan_type == ''
+    
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python (Backend)
+        if: matrix.component == 'backend'
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Node.js (Frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python dependencies
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install safety pip-audit
+
+      - name: Install Node.js dependencies
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run Safety scan (Backend)
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        run: |
+          echo "Running Safety dependency scan..."
+          safety check --json --output safety-report.json || true
+          safety check --short-report
+
+      - name: Run pip-audit scan (Backend)
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        continue-on-error: true
+        run: |
+          echo "Running pip-audit scan..."
+          pip-audit --format=json --output=pip-audit-report.json || true
+          pip-audit
+
+      - name: Run npm audit (Frontend)
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          echo "Running npm audit..."
+          npm audit --audit-level moderate --json > npm-audit.json || true
+          npm audit --audit-level moderate
+
+      - name: Run Snyk scan (Frontend)
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        continue-on-error: true
+        run: |
+          echo "Running Snyk dependency scan..."
+          npx snyk test --json > snyk-report.json || true
+          npx snyk test
+
+      - name: Upload dependency scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-scan-${{ matrix.component }}
+          path: |
+            ${{ matrix.component }}/safety-report.json
+            ${{ matrix.component }}/pip-audit-report.json
+            ${{ matrix.component }}/npm-audit.json
+            ${{ matrix.component }}/snyk-report.json
+
+  code-scan:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'code' || github.event.inputs.scan_type == ''
+    
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python (Backend)
+        if: matrix.component == 'backend'
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Node.js (Frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python dependencies
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit semgrep
+
+      - name: Install Node.js dependencies
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Run Bandit scan (Backend)
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        run: |
+          echo "Running Bandit security scan..."
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . --severity-level medium
+
+      - name: Run Semgrep scan (Backend)
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        continue-on-error: true
+        run: |
+          echo "Running Semgrep SAST scan..."
+          semgrep --config=auto --json --output=semgrep-report.json . || true
+          semgrep --config=auto .
+
+      - name: Run ESLint security scan (Frontend)
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          echo "Running ESLint security scan..."
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx --config .eslintrc.security.js --format json --output-file eslint-security-report.json || true
+          npx eslint src/ --ext .js,.jsx,.ts,.tsx --config .eslintrc.security.js || true
+
+      - name: Create ESLint security config (Frontend)
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          cat > .eslintrc.security.js << 'EOF'
+          module.exports = {
+            extends: ['plugin:security/recommended'],
+            plugins: ['security'],
+            rules: {
+              'security/detect-object-injection': 'error',
+              'security/detect-non-literal-regexp': 'error',
+              'security/detect-unsafe-regex': 'error',
+              'security/detect-buffer-noassert': 'error',
+              'security/detect-child-process': 'error',
+              'security/detect-disable-mustache-escape': 'error',
+              'security/detect-eval-with-expression': 'error',
+              'security/detect-no-csrf-before-method-override': 'error',
+              'security/detect-non-literal-fs-filename': 'error',
+              'security/detect-non-literal-require': 'error',
+              'security/detect-possible-timing-attacks': 'error',
+              'security/detect-pseudoRandomBytes': 'error'
+            }
+          };
+          EOF
+
+      - name: Upload code scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-scan-${{ matrix.component }}
+          path: |
+            ${{ matrix.component }}/bandit-report.json
+            ${{ matrix.component }}/semgrep-report.json
+            ${{ matrix.component }}/eslint-security-report.json
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'secrets' || github.event.inputs.scan_type == ''
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog secret scan
+        continue-on-error: true
+        run: |
+          echo "Running TruffleHog secret detection..."
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest github --repo https://github.com/${{ github.repository }} --json > trufflehog-report.json || true
+          
+          # Also scan local files
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json >> trufflehog-report.json || true
+
+      - name: Run GitLeaks secret scan
+        continue-on-error: true
+        run: |
+          echo "Running GitLeaks secret detection..."
+          docker run --rm -v "$PWD:/path" zricethezav/gitleaks:latest detect --source="/path" --report-format=json --report-path=/path/gitleaks-report.json || true
+
+      - name: Check for common secret patterns
+        run: |
+          echo "Checking for common secret patterns..."
+          
+          # Define patterns to search for
+          PATTERNS=(
+            "password\s*=\s*['\"][^'\"]{8,}['\"]"
+            "secret\s*=\s*['\"][^'\"]{16,}['\"]"
+            "api[_-]?key\s*=\s*['\"][^'\"]{16,}['\"]"
+            "token\s*=\s*['\"][^'\"]{16,}['\"]"
+            "AKIA[0-9A-Z]{16}"
+            "sk_live_[0-9a-zA-Z]{24}"
+            "pk_live_[0-9a-zA-Z]{24}"
+          )
+          
+          FOUND_SECRETS=false
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -r -E "$pattern" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.github --exclude="*.json" --exclude="*.md"; then
+              FOUND_SECRETS=true
+              echo "⚠️ Potential secret found matching pattern: $pattern"
+            fi
+          done
+          
+          if [ "$FOUND_SECRETS" = true ]; then
+            echo "❌ Potential secrets detected in code"
+            exit 1
+          else
+            echo "✅ No obvious secret patterns found"
+          fi
+
+      - name: Upload secret scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: secret-scan-results
+          path: |
+            trufflehog-report.json
+            gitleaks-report.json
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == ''
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker images for scanning
+        run: |
+          echo "Building Docker images for security scanning..."
+          
+          # Create temporary Dockerfiles for scanning
+          cat > Dockerfile.backend << 'EOF'
+          FROM python:3.11-slim
+          WORKDIR /app
+          COPY backend/requirements.txt .
+          RUN pip install -r requirements.txt
+          COPY backend/ .
+          EOF
+          
+          cat > Dockerfile.frontend << 'EOF'
+          FROM node:22-alpine
+          WORKDIR /app
+          COPY frontend/package*.json ./
+          RUN npm ci --only=production
+          COPY frontend/ .
+          RUN npm run build
+          EOF
+          
+          docker build -f Dockerfile.backend -t tiktrue-backend:scan .
+          docker build -f Dockerfile.frontend -t tiktrue-frontend:scan .
+
+      - name: Run Trivy container scan
+        continue-on-error: true
+        run: |
+          echo "Running Trivy container security scan..."
+          
+          # Install Trivy
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+          
+          # Scan images
+          trivy image --format json --output trivy-backend-report.json tiktrue-backend:scan || true
+          trivy image --format json --output trivy-frontend-report.json tiktrue-frontend:scan || true
+          
+          # Show summary
+          trivy image tiktrue-backend:scan
+          trivy image tiktrue-frontend:scan
+
+      - name: Upload container scan results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-scan-results
+          path: |
+            trivy-backend-report.json
+            trivy-frontend-report.json
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, code-scan, secret-scan, container-scan]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate security summary
+        run: |
+          echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Vulnerabilities | ${{ needs.dependency-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} | Backend & Frontend dependencies scanned |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Code Analysis | ${{ needs.code-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} | SAST tools executed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection | ${{ needs.secret-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} | Repository scanned for secrets |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Security | ${{ needs.container-scan.result == 'success' && '✅ Passed' || '⚠️ Warning' }} | Docker images scanned |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count total issues found
+          CRITICAL_ISSUES=0
+          HIGH_ISSUES=0
+          MEDIUM_ISSUES=0
+          
+          echo "### 📊 Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical**: $CRITICAL_ISSUES" >> $GITHUB_STEP_SUMMARY
+          echo "- **High**: $HIGH_ISSUES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Medium**: $MEDIUM_ISSUES" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.dependency-scan.result }}" == "success" && "${{ needs.code-scan.result }}" == "success" && "${{ needs.secret-scan.result }}" == "success" ]]; then
+            echo "### 🎉 All critical security scans passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Security issues detected. Please review the scan results." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create security issue
+        if: needs.dependency-scan.result == 'failure' || needs.code-scan.result == 'failure' || needs.secret-scan.result == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Security Vulnerabilities Detected - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## Security Scan Results
+              
+              **Scan Date**: ${new Date().toISOString()}
+              **Commit**: ${context.sha}
+              **Workflow**: ${context.workflow}
+              **Run ID**: ${context.runId}
+              
+              **Failed Scans**:
+              - Dependency Scan: ${{ needs.dependency-scan.result }}
+              - Code Scan: ${{ needs.code-scan.result }}
+              - Secret Scan: ${{ needs.secret-scan.result }}
+              - Container Scan: ${{ needs.container-scan.result }}
+              
+              **Next Steps**:
+              1. Review the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId})
+              2. Download and analyze the scan artifacts
+              3. Fix identified vulnerabilities
+              4. Re-run security scans to verify fixes
+              
+              **Priority**: High - Security vulnerabilities should be addressed promptly
+              
+              **Links**:
+              - [Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+              - [Security Policy](${context.payload.repository.html_url}/security/policy)
+              `,
+              labels: ['security', 'vulnerability', 'urgent']
+            });

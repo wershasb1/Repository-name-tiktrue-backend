@@ -1,0 +1,242 @@
+name: Backend Deployment
+
+on:
+  push:
+    branches: [main]
+    paths: 
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths: 
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  PYTHON_VERSION: '3.11'
+  WORKING_DIRECTORY: './backend'
+
+jobs:
+  test:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-django bandit safety flake8
+
+      - name: Run linting
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running flake8 linting..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run security scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running bandit security scan..."
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . --severity-level medium
+
+      - name: Check dependencies for vulnerabilities
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Checking dependencies for known vulnerabilities..."
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Setup test database
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Setting up test database..."
+          export SECRET_KEY="test-secret-key-for-ci"
+          export DEBUG="True"
+          export DATABASE_URL="sqlite:///test.db"
+          python manage.py migrate --noinput
+
+      - name: Run tests with coverage
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Running tests with coverage..."
+          export SECRET_KEY="test-secret-key-for-ci"
+          export DEBUG="True"
+          export DATABASE_URL="sqlite:///test.db"
+          pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
+          
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-test-results
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+            backend/htmlcov/
+            backend/coverage.xml
+
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: production
+      url: https://tiktrue-backend.liara.run
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for Liara CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Liara CLI
+        run: |
+          npm install -g @liara/cli
+          
+      - name: Login to Liara
+        run: |
+          liara login --api-token ${{ secrets.LIARA_API_TOKEN }}
+
+      - name: Deploy to Liara
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "Deploying backend to Liara..."
+          liara deploy --app tiktrue-backend --platform django --detach
+          
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for deployment to complete..."
+          sleep 60
+
+      - name: Health check
+        run: |
+          echo "Performing health checks..."
+          
+          # Backend API health check
+          for i in {1..10}; do
+            echo "Health check attempt $i/10..."
+            if curl -f -s https://tiktrue-backend.liara.run/health/; then
+              echo "✅ Backend health check passed"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "❌ Backend health check failed after 10 attempts"
+              exit 1
+            fi
+            sleep 15
+          done
+          
+          # Test API endpoints
+          echo "Testing API endpoints..."
+          curl -f -s https://tiktrue-backend.liara.run/admin/ > /dev/null
+          echo "✅ Admin endpoint accessible"
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Backend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Successful" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://tiktrue-backend.liara.run" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health Check**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [test, deploy]
+    if: always()
+    
+    steps:
+      - name: Notify on success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "🎉 Backend deployment successful!"
+          echo "URL: https://tiktrue-backend.liara.run"
+          
+      - name: Notify on failure
+        if: needs.test.result == 'failure' || needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Backend deployment failed!"
+          echo "Check the logs for details."
+          
+          # Create GitHub issue for deployment failure
+          if [ "${{ needs.deploy.result }}" == "failure" ]; then
+            echo "Creating GitHub issue for deployment failure..."
+          fi
+
+      - name: Create failure issue
+        if: needs.deploy.result == 'failure' && github.ref == 'refs/heads/main'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Backend Deployment Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: `
+              ## Backend Deployment Failure
+              
+              **Commit**: ${context.sha}
+              **Actor**: ${context.actor}
+              **Workflow**: ${context.workflow}
+              **Run ID**: ${context.runId}
+              
+              **Details**:
+              - The backend deployment to Liara failed
+              - Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+              - Health checks may have failed
+              
+              **Next Steps**:
+              1. Review the deployment logs
+              2. Check Liara dashboard for errors
+              3. Verify environment variables and secrets
+              4. Consider rolling back if necessary
+              
+              **Links**:
+              - [Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+              - [Liara Dashboard](https://console.liara.ir/apps/tiktrue-backend)
+              - [Backend URL](https://tiktrue-backend.liara.run)
+              `,
+              labels: ['bug', 'deployment', 'backend', 'urgent']
+            });

@@ -1,0 +1,83 @@
+# Common configuration template for workflows
+# This file serves as a reference for common patterns used across workflows
+
+# Common environment variables
+env:
+  NODE_VERSION: '22'
+  PYTHON_VERSION: '3.11'
+  LIARA_CLI_VERSION: 'latest'
+
+# Common job defaults
+defaults:
+  run:
+    shell: bash
+
+# Common steps that can be referenced
+# Note: These are templates, actual workflows will implement these patterns
+
+# Checkout step
+# - name: Checkout code
+#   uses: actions/checkout@v4
+#   with:
+#     fetch-depth: 0
+
+# Node.js setup
+# - name: Setup Node.js
+#   uses: actions/setup-node@v4
+#   with:
+#     node-version: ${{ env.NODE_VERSION }}
+#     cache: 'npm'
+#     cache-dependency-path: frontend/package-lock.json
+
+# Python setup
+# - name: Setup Python
+#   uses: actions/setup-python@v4
+#   with:
+#     python-version: ${{ env.PYTHON_VERSION }}
+#     cache: 'pip'
+#     cache-dependency-path: backend/requirements.txt
+
+# Liara CLI setup
+# - name: Setup Liara CLI
+#   run: |
+#     npm install -g @liara/cli@${{ env.LIARA_CLI_VERSION }}
+#     liara login --api-token ${{ secrets.LIARA_API_TOKEN }}
+
+# Health check template
+# - name: Health Check
+#   run: |
+#     echo "Waiting for deployment to be ready..."
+#     sleep 30
+#     
+#     # Backend health check
+#     for i in {1..5}; do
+#       if curl -f https://tiktrue-backend.liara.run/health/; then
+#         echo "Backend health check passed"
+#         break
+#       fi
+#       echo "Backend health check failed, attempt $i/5"
+#       sleep 10
+#     done
+#     
+#     # Frontend health check
+#     for i in {1..5}; do
+#       if curl -f https://tiktrue-frontend.liara.run/; then
+#         echo "Frontend health check passed"
+#         break
+#       fi
+#       echo "Frontend health check failed, attempt $i/5"
+#       sleep 10
+#     done
+
+# Notification template
+# - name: Notify on Success
+#   if: success()
+#   run: |
+#     echo "Deployment successful!"
+#     # Add notification logic here
+#
+# - name: Notify on Failure
+#   if: failure()
+#   run: |
+#     echo "Deployment failed!"
+#     # Add notification logic here
